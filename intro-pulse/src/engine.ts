@@ -127,11 +127,8 @@ function parseCsv(text: string): string[][] {
   return rows.filter((r) => r.some((c) => c.trim() !== ''));
 }
 
-function readRows(path: string): unknown[][] {
-  if (/\.(csv|tsv|txt)$/i.test(path)) {
-    return parseCsv(readFileSync(path, 'utf8'));
-  }
-  const wb = XLSX.readFile(path, { cellDates: true });
+// Wählt aus einer Arbeitsmappe das Aktivitäts-Blatt (Header-Abgleich + meiste Zeilen).
+function pickSheetRows(wb: XLSX.WorkBook): unknown[][] {
   let best: unknown[][] | null = null;
   let bestScore = -1;
   for (const name of wb.SheetNames) {
@@ -152,6 +149,21 @@ function readRows(path: string): unknown[][] {
   if (!best)
     throw new Error('Kein Aktivitäts-Blatt gefunden (Spalte "Firma/Account" fehlt).');
   return best;
+}
+
+function readRows(path: string): unknown[][] {
+  if (/\.(csv|tsv|txt)$/i.test(path)) {
+    return parseCsv(readFileSync(path, 'utf8'));
+  }
+  return pickSheetRows(XLSX.readFile(path, { cellDates: true }));
+}
+
+// Wie readRows, aber aus einem In-Memory-Puffer (für Web-Uploads). Laufzeit-agnostisch.
+export function readRowsFromBuffer(data: Uint8Array, filename: string): unknown[][] {
+  if (/\.(csv|tsv|txt)$/i.test(filename)) {
+    return parseCsv(new TextDecoder('utf-8').decode(data));
+  }
+  return pickSheetRows(XLSX.read(data, { type: 'array', cellDates: true }));
 }
 
 // ---------------------------------------------------------------------------
@@ -175,8 +187,7 @@ const COLS: Record<string, keyof Activity> = {
   kampagne: 'kampagne',
 };
 
-export function parseActivities(path: string): Activity[] {
-  const rows = readRows(path);
+function rowsToActivities(rows: unknown[][]): Activity[] {
   const headerIdx = rows.findIndex((r) =>
     r.some((c) => normHeader(c) === 'firma/account'),
   );
@@ -218,6 +229,28 @@ export function parseActivities(path: string): Activity[] {
     });
   }
   return activities;
+}
+
+/** Datei-Pfad → Aktivitäten (Node/CLI). */
+export function parseActivities(path: string): Activity[] {
+  return rowsToActivities(readRows(path));
+}
+
+/** In-Memory-Puffer (Upload) → Aktivitäten (Web). */
+export function parseActivitiesFromBuffer(
+  data: Uint8Array,
+  filename: string,
+): Activity[] {
+  return rowsToActivities(readRowsFromBuffer(data, filename));
+}
+
+/** Bequemer Einstieg für Web-Uploads: Puffer → Kennzahlen. */
+export function analyzeBuffer(
+  data: Uint8Array,
+  filename: string,
+  opts?: { goalPerMonth?: number },
+): Kpis {
+  return computeKpis(parseActivitiesFromBuffer(data, filename), opts);
 }
 
 // ---------------------------------------------------------------------------

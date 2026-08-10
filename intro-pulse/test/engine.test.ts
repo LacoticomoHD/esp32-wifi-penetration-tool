@@ -3,8 +3,10 @@
 
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import {
   analyzeFile,
+  analyzeBuffer,
   parseGermanNumber,
   parseDate,
   parseActivities,
@@ -77,6 +79,11 @@ const einw = Object.fromEntries(k.byEinwand.map((e) => [e.label, e.companies]));
 check('Einwand: Beta = nie erreicht', einw['nie erreicht'] === 1, JSON.stringify(k.byEinwand));
 check('Einwand: Gamma = grundsätzlich kein Interesse', einw['grundsätzlich kein Interesse'] === 1);
 check('Einwand: Alpha = Termin vereinbart', einw['Termin vereinbart'] === 1);
+
+console.log('\nUpload-Pfad (Puffer statt Datei)');
+const kBuf = analyzeBuffer(readFileSync(fixture), 'fixture.csv');
+check('analyzeBuffer == analyzeFile (4 Firmen)', kBuf.totalCompanies === 4);
+check('analyzeBuffer Termin-Quote identisch', approx(kBuf.terminQuote, k.terminQuote));
 
 console.log('');
 if (failures) {
