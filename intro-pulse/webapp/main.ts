@@ -10,6 +10,9 @@ import {
 import type { Activity, Kpis } from '../src/types';
 
 let allActivities: Activity[] = [];
+let currentKpis: Kpis | null = null;
+let currentActs: Activity[] = [];
+let chatHistory: { role: string; content: string }[] = [];
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const appEl = () => $('app');
@@ -131,9 +134,6 @@ function renderDashboard(k: Kpis, activityCount: number) {
       <div class="card panel"><h3>Schwer zu knacken</h3><p class="cap">Viel Aufwand, noch kein Termin.</p><div class="clist">${k.hardCases.map((c) => contactRow(c, true)).join('')}</div></div>
     </div>
 
-    ${secHead('Intelligenz', 'KI‑Analyse')}
-    <div class="card ai"><div class="aihead"><span class="badge">Phase 2</span><h3>Automatische Deutung durch Claude</h3></div>
-      <p class="disc">Kommt als Nächstes: Claude formuliert je Report „was lief gut / warum keine Termine / Empfehlung" und beantwortet freie Rückfragen — mit dem Projekt‑Steckbrief als Kontext.</p></div>
   `;
 
   drawTimeline(k.timeline);
@@ -182,10 +182,14 @@ function apply() {
   if (fSekt().value) acts = acts.filter((a) => classifySektor(a.firma) === fSekt().value);
   if (fErg().value) acts = acts.filter((a) => a.ergebnis === fErg().value);
   if (acts.length === 0) {
+    hideKI();
     appEl().innerHTML = `<div class="empty"><div class="big">🔍</div><h2>Keine Aktivitäten</h2><p>Für diese Filter gibt es keine Daten. Setze die Filter zurück.</p></div>`;
     return;
   }
-  renderDashboard(computeKpis(acts, { goalPerMonth: 3 }), acts.length);
+  currentActs = acts;
+  currentKpis = computeKpis(acts, { goalPerMonth: 3 });
+  renderDashboard(currentKpis, acts.length);
+  showKI();
 }
 
 // ---- Datei-Upload -----------------------------------------------------------
@@ -214,3 +218,95 @@ wireInput('file');
 wireInput('file2');
 [fAkq(), fSekt(), fErg()].forEach((s) => s.addEventListener('change', apply));
 $('f-reset').addEventListener('click', (e) => { e.preventDefault(); fAkq().value = ''; fSekt().value = ''; fErg().value = ''; apply(); });
+
+// ---- KI-Sektion (serverseitiger Claude-Aufruf) ------------------------------
+function showKI() {
+  const sec = document.getElementById('kisec');
+  if (sec) sec.style.display = '';
+  const steck = document.getElementById('ki-steck') as HTMLTextAreaElement | null;
+  const model = document.getElementById('ki-model') as HTMLSelectElement | null;
+  if (steck && !steck.value) steck.value = localStorage.getItem('ki-steck') || '';
+  if (model && localStorage.getItem('ki-model')) model.value = localStorage.getItem('ki-model')!;
+}
+function hideKI() { const sec = document.getElementById('kisec'); if (sec) sec.style.display = 'none'; }
+
+function buildReport() {
+  const k = currentKpis!;
+  const notizen = currentActs
+    .filter((a) => a.kommentar && a.kommentar.trim().length > 3)
+    .slice(0, 60)
+    .map((a) => ({ firma: a.firma, ergebnis: a.ergebnis, notiz: a.kommentar.slice(0, 280) }));
+  return {
+    kampagne: k.campaign,
+    zeitraum: `${fmtDate(k.dateRange.from)}–${fmtDate(k.dateRange.to)}`,
+    kennzahlen: {
+      firmen: k.totalCompanies, aktivitaeten: k.totalActivities,
+      terminQuoteProzent: +(k.terminQuote * 100).toFixed(1), termine: k.wonCompanies,
+      entscheiderQuoteProzent: +(k.entscheiderQuote * 100).toFixed(1),
+      fruehAbrissRateProzent: +(k.fruehAbrissRate * 100).toFixed(1),
+      avgAnrufeBisTermin: k.avgCallsToTermin, avgVersucheJeFirma: +k.avgAttemptsPerCompany.toFixed(1),
+      zielProMonat: k.goal.perMonth, zielerreichungProzent: +(k.goal.attainment * 100).toFixed(0),
+    },
+    funnel: k.funnel.filter((f) => f.rank > 0),
+    sektor: k.bySektor, icp: k.byIcp, einwaende: k.byEinwand,
+    meistBearbeitet: k.mostContacted, schwerZuKnacken: k.hardCases,
+    gespraechsnotizen: notizen,
+  };
+}
+async function callKI(payload: Record<string, unknown>): Promise<string> {
+  const res = await fetch('/api/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+  const data = await res.json().catch(() => ({ error: 'Ungültige Antwort vom Server.' }));
+  if (!res.ok || data.error) throw new Error(data.error || `Server-Fehler ${res.status}`);
+  return data.text as string;
+}
+function md(t: string): string {
+  const inline = (s: string) => s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  let html = '', inList = false;
+  for (const raw of esc(t).split('\n')) {
+    const l = raw.trim();
+    if (/^#{1,4}\s+/.test(l)) { if (inList) { html += '</ul>'; inList = false; } html += `<h4>${inline(l.replace(/^#{1,4}\s+/, ''))}</h4>`; }
+    else if (/^[-*]\s+/.test(l)) { if (!inList) { html += '<ul>'; inList = true; } html += `<li>${inline(l.replace(/^[-*]\s+/, ''))}</li>`; }
+    else if (l === '') { if (inList) { html += '</ul>'; inList = false; } }
+    else { if (inList) { html += '</ul>'; inList = false; } html += `<p>${inline(l)}</p>`; }
+  }
+  if (inList) html += '</ul>';
+  return html;
+}
+async function runAnalysis() {
+  if (!currentKpis) return;
+  const out = document.getElementById('ki-out')!;
+  const btn = document.getElementById('ki-run') as HTMLButtonElement;
+  const model = (document.getElementById('ki-model') as HTMLSelectElement).value;
+  const steckbrief = (document.getElementById('ki-steck') as HTMLTextAreaElement).value;
+  localStorage.setItem('ki-steck', steckbrief); localStorage.setItem('ki-model', model);
+  btn.disabled = true;
+  out.innerHTML = '<div class="ki-loading">Claude analysiert den Report …</div>';
+  try { out.innerHTML = md(await callKI({ mode: 'analyze', model, steckbrief, report: buildReport() })); }
+  catch (e) { out.innerHTML = `<div class="err">${esc((e as Error).message)}</div>`; }
+  finally { btn.disabled = false; }
+}
+async function runChat() {
+  if (!currentKpis) return;
+  const input = document.getElementById('ki-q') as HTMLInputElement;
+  const q = input.value.trim(); if (!q) return;
+  const log = document.getElementById('ki-log')!;
+  const btn = document.getElementById('ki-ask') as HTMLButtonElement;
+  const model = (document.getElementById('ki-model') as HTMLSelectElement).value;
+  const steckbrief = (document.getElementById('ki-steck') as HTMLTextAreaElement).value;
+  input.value = '';
+  btn.disabled = true;
+  log.insertAdjacentHTML('beforeend', `<div class="ki-q">${esc(q)}</div><div class="ki-a ki-loading">…</div>`);
+  const aEl = log.lastElementChild as HTMLElement;
+  log.scrollTop = log.scrollHeight;
+  try {
+    const text = await callKI({ mode: 'chat', model, steckbrief, report: buildReport(), history: chatHistory, question: q });
+    chatHistory.push({ role: 'user', content: q }, { role: 'assistant', content: text });
+    if (chatHistory.length > 12) chatHistory = chatHistory.slice(-12);
+    aEl.className = 'ki-a'; aEl.innerHTML = md(text);
+  } catch (e) { aEl.className = 'ki-a'; aEl.innerHTML = `<div class="err">${esc((e as Error).message)}</div>`; }
+  finally { btn.disabled = false; }
+  log.scrollTop = log.scrollHeight;
+}
+document.getElementById('ki-run')?.addEventListener('click', runAnalysis);
+document.getElementById('ki-ask')?.addEventListener('click', runChat);
+document.getElementById('ki-q')?.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') runChat(); });

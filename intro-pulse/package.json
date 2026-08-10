@@ -7,9 +7,12 @@
   "scripts": {
     "analyze": "tsx src/cli.ts",
     "test": "tsx test/engine.test.ts",
-    "build:web": "node webapp/build.mjs"
+    "build:web": "node webapp/build.mjs",
+    "serve": "node --env-file-if-exists=.env webapp/server.mjs",
+    "dev": "npm run build:web && npm run serve"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.116.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

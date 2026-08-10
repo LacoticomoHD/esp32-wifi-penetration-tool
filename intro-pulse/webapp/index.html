@@ -136,8 +136,47 @@
   footer .l{display:flex; align-items:center; gap:8px}
   footer .l .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
 
-  @media (max-width:720px){ .cols{grid-template-columns:1fr} .srow{grid-template-columns:120px 1fr 76px} }
-  @media (prefers-reduced-motion: reduce){ .sfill{animation:none} .tile{transition:none} }
+  /* KI-Analyse */
+  .kisec{margin-top:8px}
+  .ki{padding:20px 22px 22px}
+  .ki-controls{display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap}
+  .ki-field{display:flex; flex-direction:column; gap:5px}
+  .ki-lab{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .ki-btn{font:inherit; font-size:13px; font-weight:700; color:#fff; background:var(--accent);
+    border:1px solid transparent; padding:9px 16px; cursor:pointer}
+  .ki-btn:hover{filter:brightness(1.05)}
+  .ki-btn:disabled{opacity:.5; cursor:default; filter:none}
+  .ki-btn.ghost{color:var(--accent); background:transparent; border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .ki-steck-wrap{margin-top:14px; border-top:1px solid var(--border); padding-top:12px}
+  .ki-steck-wrap summary{font-size:12.5px; color:var(--muted); cursor:pointer; font-weight:600; list-style:none}
+  .ki-steck-wrap summary::-webkit-details-marker{display:none}
+  .ki-steck-wrap summary::before{content:"▸ "; color:var(--accent)}
+  .ki-steck-wrap[open] summary::before{content:"▾ "}
+  .ki-ta{width:100%; margin-top:10px; min-height:96px; resize:vertical; font:inherit; font-size:13px;
+    color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:10px 12px; line-height:1.5}
+  .ki-out{margin-top:16px}
+  .ki-out .ki-hint{color:var(--muted); font-size:13px; margin:0; max-width:64ch}
+  .ki-out h4{margin:16px 0 6px; font-size:13.5px; font-weight:700; color:var(--ink)}
+  .ki-out h4:first-child{margin-top:0}
+  .ki-out p{margin:0 0 8px; font-size:13.5px}
+  .ki-out ul{margin:4px 0 10px; padding-left:20px}
+  .ki-out li{font-size:13.5px; margin:3px 0}
+  .ki-loading{color:var(--muted); font-size:13px}
+  .ki-loading::after{content:"▍"; animation:blink 1s steps(1) infinite; margin-left:1px}
+  @keyframes blink{50%{opacity:0}}
+  .ki-chat{margin-top:18px; border-top:1px solid var(--border); padding-top:14px}
+  .ki-log{display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto}
+  .ki-log:empty{display:none}
+  .ki-q{align-self:flex-end; max-width:82%; background:var(--navy); color:var(--on-navy); padding:8px 12px; font-size:13px}
+  .ki-a{align-self:flex-start; max-width:92%; background:var(--bg); border:1px solid var(--border); padding:2px 14px; font-size:13.5px}
+  .ki-a p{margin:8px 0} .ki-a h4{margin:10px 0 4px; font-size:13px; font-weight:700} .ki-a ul{margin:4px 0; padding-left:18px} .ki-a li{margin:3px 0}
+  .ki-input{display:flex; gap:8px; margin-top:12px}
+  .ki-qin{flex:1; min-width:0; font:inherit; font-size:13px; color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:9px 12px}
+  .ki-qin:focus{outline:none; border-color:var(--accent)}
+
+  @media (max-width:720px){ .cols{grid-template-columns:1fr} .srow{grid-template-columns:120px 1fr 76px}
+    .ki-controls{align-items:stretch} .ki-field{width:100%} .ki-btn{width:100%} }
+  @media (prefers-reduced-motion: reduce){ .sfill{animation:none} .tile{transition:none} .ki-loading::after{animation:none} }
 </style>
 </head>
 <body>
@@ -180,6 +219,38 @@
         <div id="err"></div>
       </div>
     </div>
+
+    <section id="kisec" class="kisec" style="display:none">
+      <div class="sec-head">
+        <div><div class="eyebrow">KI‑Analyse</div><h2>Was sagt Claude zu dieser Kampagne?</h2></div>
+        <div class="m">Auswertung läuft serverseitig · dein API‑Key bleibt auf dem Server</div>
+      </div>
+      <div class="card ki">
+        <div class="ki-controls">
+          <label class="ki-field">
+            <span class="ki-lab">Modell</span>
+            <select id="ki-model" class="fsel">
+              <option value="claude-sonnet-5">Claude Sonnet 5 — ausgewogen (Standard)</option>
+              <option value="claude-haiku-4-5">Claude Haiku 4.5 — schnell &amp; günstig</option>
+              <option value="claude-opus-5">Claude Opus 5 — tiefste Analyse</option>
+            </select>
+          </label>
+          <button id="ki-run" class="ki-btn">✨ Analyse starten</button>
+        </div>
+        <details class="ki-steck-wrap">
+          <summary>Projekt‑Steckbrief als Kontext für Claude — optional, wird nur lokal gespeichert</summary>
+          <textarea id="ki-steck" class="ki-ta" placeholder="Wer ist der Kunde? Zielgruppe/ICP, Angebot, typische Einwände, Kampagnenziel … Je mehr Kontext, desto treffsicherer die Analyse."></textarea>
+        </details>
+        <div id="ki-out" class="ki-out"><p class="ki-hint">Klick auf „Analyse starten" — Claude bewertet Termin‑Quote, Funnel und Einwände und gibt priorisierte Empfehlungen. Anschließend kannst du unten Rückfragen stellen.</p></div>
+        <div class="ki-chat">
+          <div id="ki-log" class="ki-log"></div>
+          <div class="ki-input">
+            <input id="ki-q" class="ki-qin" type="text" placeholder="Rückfrage an Claude — z. B. „Welche 5 Firmen sollte ich zuerst nachfassen?“" />
+            <button id="ki-ask" class="ki-btn ghost">Fragen</button>
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer>
