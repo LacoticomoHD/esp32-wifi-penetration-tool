@@ -1,7 +1,7 @@
 // CLI-Runner: analysiert eine Aktivitätsdatei und gibt einen Textreport aus.
 // Nutzung:  npm run analyze -- <pfad-zur-datei.xlsx|csv>
 
-import { analyzeFile } from './engine';
+import { analyzeFile } from './node';
 import type { Kpis } from './types';
 
 function pct(n: number): string {

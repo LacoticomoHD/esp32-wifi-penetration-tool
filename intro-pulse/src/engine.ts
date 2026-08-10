@@ -2,7 +2,6 @@
 // Framework-unabhängig: wird später von der Next.js-App aufgerufen und ist
 // per CLI (src/cli.ts) direkt gegen echte Dateien testbar.
 
-import { readFileSync } from 'node:fs';
 import * as XLSXImport from 'xlsx';
 // SheetJS ist ein CommonJS-Paket; unter ESM/tsx liegen die Funktionen je nach
 // Interop unter .default oder direkt im Namespace — beides abfangen.
@@ -92,7 +91,7 @@ function detectDelimiter(headerLine: string): string {
   return best && best[1] > 0 ? best[0] : ',';
 }
 
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   text = text.replace(/^﻿/, ''); // BOM
   const firstLine = text.split(/\r?\n/, 1)[0] ?? '';
   const delim = detectDelimiter(firstLine);
@@ -128,7 +127,7 @@ function parseCsv(text: string): string[][] {
 }
 
 // Wählt aus einer Arbeitsmappe das Aktivitäts-Blatt (Header-Abgleich + meiste Zeilen).
-function pickSheetRows(wb: XLSX.WorkBook): unknown[][] {
+export function pickSheetRows(wb: XLSX.WorkBook): unknown[][] {
   let best: unknown[][] | null = null;
   let bestScore = -1;
   for (const name of wb.SheetNames) {
@@ -151,12 +150,8 @@ function pickSheetRows(wb: XLSX.WorkBook): unknown[][] {
   return best;
 }
 
-function readRows(path: string): unknown[][] {
-  if (/\.(csv|tsv|txt)$/i.test(path)) {
-    return parseCsv(readFileSync(path, 'utf8'));
-  }
-  return pickSheetRows(XLSX.readFile(path, { cellDates: true }));
-}
+// Datei-Lesen von der Platte liegt in node.ts (Node-only), damit engine.ts
+// im Browser gebündelt werden kann.
 
 // Wie readRows, aber aus einem In-Memory-Puffer (für Web-Uploads). Laufzeit-agnostisch.
 export function readRowsFromBuffer(data: Uint8Array, filename: string): unknown[][] {
@@ -187,7 +182,7 @@ const COLS: Record<string, keyof Activity> = {
   kampagne: 'kampagne',
 };
 
-function rowsToActivities(rows: unknown[][]): Activity[] {
+export function rowsToActivities(rows: unknown[][]): Activity[] {
   const headerIdx = rows.findIndex((r) =>
     r.some((c) => normHeader(c) === 'firma/account'),
   );
@@ -229,11 +224,6 @@ function rowsToActivities(rows: unknown[][]): Activity[] {
     });
   }
   return activities;
-}
-
-/** Datei-Pfad → Aktivitäten (Node/CLI). */
-export function parseActivities(path: string): Activity[] {
-  return rowsToActivities(readRows(path));
 }
 
 /** In-Memory-Puffer (Upload) → Aktivitäten (Web). */
@@ -558,10 +548,4 @@ export function computeKpis(
   };
 }
 
-/** Bequemer Einstieg: Datei → Kennzahlen. */
-export function analyzeFile(
-  path: string,
-  opts?: { goalPerMonth?: number },
-): Kpis {
-  return computeKpis(parseActivities(path), opts);
-}
+// analyzeFile / parseActivities (Pfad-basiert) liegen in node.ts.

@@ -4,12 +4,11 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { analyzeFile, parseActivities } from '../src/node';
 import {
-  analyzeFile,
   analyzeBuffer,
   parseGermanNumber,
   parseDate,
-  parseActivities,
   aggregateCompanies,
 } from '../src/engine';
 
