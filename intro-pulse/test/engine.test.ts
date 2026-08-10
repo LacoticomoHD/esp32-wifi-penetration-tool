@@ -65,6 +65,19 @@ check('Schwerster Fall = Beta (2×, kein Termin)', k.hardCases[0]?.name === 'Bet
 check('Disqualifizierte nicht in hardCases', !k.hardCases.some((c) => c.name === 'Gamma GmbH'));
 check('Timeline summiert 7 Aktivitäten', k.timeline.reduce((n, d) => n + d.activities, 0) === 7, JSON.stringify(k.timeline));
 
+console.log('\nViergrad-Dimensionen (Sektor / ICP / Ziel / Einwände)');
+const sekt = Object.fromEntries(k.bySektor.map((s) => [s.label, s]));
+check('Sektor: 4 private Firmen (GmbH/AG)', sekt['privat']?.companies === 4, JSON.stringify(k.bySektor));
+const icp = Object.fromEntries(k.byIcp.map((s) => [s.label, s]));
+check('ICP: Kern-ICP 2 Firmen, 1 Termin (Alpha, Gamma)', icp['Kern-ICP']?.companies === 2 && icp['Kern-ICP']?.won === 1, JSON.stringify(icp['Kern-ICP']));
+check('ICP: außerhalb 2 Firmen, 0 Termine (Beta 300 / Delta 120 MA)', icp['außerhalb ICP']?.companies === 2 && icp['außerhalb ICP']?.won === 0, JSON.stringify(icp['außerhalb ICP']));
+check('Ziel: default 3/Monat, Ist 2/Monat', k.goal.perMonth === 3 && approx(k.goal.wonPerMonth, 2), JSON.stringify(k.goal));
+check('Ziel: goalPerMonth-Override greift', analyzeFile(fixture, { goalPerMonth: 5 }).goal.perMonth === 5);
+const einw = Object.fromEntries(k.byEinwand.map((e) => [e.label, e.companies]));
+check('Einwand: Beta = nie erreicht', einw['nie erreicht'] === 1, JSON.stringify(k.byEinwand));
+check('Einwand: Gamma = grundsätzlich kein Interesse', einw['grundsätzlich kein Interesse'] === 1);
+check('Einwand: Alpha = Termin vereinbart', einw['Termin vereinbart'] === 1);
+
 console.log('');
 if (failures) {
   console.error(`FEHLGESCHLAGEN: ${failures} Prüfung(en).`);

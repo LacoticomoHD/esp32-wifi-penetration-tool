@@ -70,6 +70,25 @@ function report(k: Kpis): string {
     L.push(`    ${s.label.padEnd(14)} ${pct(s.terminQuote).padStart(7)}  (${s.won}/${s.companies})`);
   }
   L.push('');
+  L.push('  ── Sektor (öffentlich vs. privat) ────────────────────────');
+  for (const s of k.bySektor) {
+    L.push(`    ${s.label.padEnd(12)} Termin-Quote ${pct(s.terminQuote).padStart(7)}  (${s.won}/${s.companies})`);
+  }
+  L.push('');
+  L.push('  ── ICP-Fit (Kern-Zielsegment 5–100 MA) ───────────────────');
+  for (const s of k.byIcp) {
+    L.push(`    ${s.label.padEnd(14)} Termin-Quote ${pct(s.terminQuote).padStart(7)}  (${s.won}/${s.companies})`);
+  }
+  L.push('');
+  L.push('  ── Zielerreichung ────────────────────────────────────────');
+  L.push(`    Ziel ${k.goal.perMonth} Termine/Monat · Ist ${k.goal.wonPerMonth.toFixed(1)}/Monat  →  ${pct(k.goal.attainment)} Zielerreichung`);
+  L.push(`    (${k.wonCompanies} Termine in ${k.goal.months.toFixed(1)} Monaten)`);
+  L.push('');
+  L.push('  ── Warum (noch) kein Termin · Einwände (heuristisch) ─────');
+  for (const e of k.byEinwand) {
+    L.push(`    ${e.label.padEnd(30)} ${String(e.companies).padStart(3)} Firmen`);
+  }
+  L.push('');
   return L.join('\n');
 }
 

@@ -46,6 +46,10 @@ export interface Company {
   mitarbeiter: number | null;
   stadt: string;
   zugeordnet: string;
+  // Viergrad-Projektkontext (heuristisch, in der App manuell korrigierbar):
+  sektor: 'öffentlich' | 'privat' | 'unklar';
+  icpFit: boolean | null; // im Kern-Zielsegment (5–100 MA, privat, kein Wettbewerber)?
+  einwand: string; // Einwand-/Status-Kategorie
 }
 
 export interface CallerKpi {
@@ -94,6 +98,10 @@ export interface Kpis {
   byAkquisiteur: CallerKpi[];
   byRevenueBand: SegmentKpi[];
   byEmployeeBand: SegmentKpi[];
+  bySektor: SegmentKpi[]; // öffentlich vs. privat
+  byIcp: SegmentKpi[]; // Kern-ICP vs. außerhalb
+  byEinwand: { label: string; companies: number }[]; // warum (noch) kein Termin
+  goal: { perMonth: number; months: number; wonPerMonth: number; attainment: number };
   timeline: { date: string; activities: number }[];
   dateRange: { from: Date | null; to: Date | null };
 }

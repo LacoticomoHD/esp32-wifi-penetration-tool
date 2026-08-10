@@ -229,6 +229,54 @@ function maxOrNull(nums: (number | null)[]): number | null {
   return vals.length ? Math.max(...vals) : null;
 }
 
+// --- Viergrad-Projektkontext (heuristisch; in der App manuell korrigierbar) ---
+const PUBLIC_WORDS = [
+  'landratsamt', 'landkreis', 'gemeindeverwaltung', 'gemeinde', 'stadtverwaltung',
+  'rathaus', 'kommun', 'handwerkskammer', 'industrie- und handelskammer',
+  'handelskammer', 'volkshochschule', 'wirtschaftsförderung', 'hochschule',
+  'universität', 'ministerium', 'landesbetrieb',
+];
+const PUBLIC_RE = /\b(ihk|hwk|vhs|wfg)\b/;
+const FORM_RE = /\b(gmbh|ag|kg|mbh|ug|gbr|ohg|se|kgaa)\b|e\.?\s?k\.?/;
+const COMPETITOR_RE =
+  /(agentur|werbe|webdesign|web-design|onlinemarketing|online-marketing|seo-)/;
+
+function classifySektor(name: string): 'öffentlich' | 'privat' | 'unklar' {
+  const n = name.toLowerCase();
+  if (PUBLIC_WORDS.some((w) => n.includes(w)) || PUBLIC_RE.test(n)) return 'öffentlich';
+  if (FORM_RE.test(n)) return 'privat';
+  return 'unklar';
+}
+
+function classifyIcp(
+  mitarbeiter: number | null,
+  sektor: 'öffentlich' | 'privat' | 'unklar',
+  name: string,
+): boolean | null {
+  if (sektor === 'öffentlich') return false; // Multiplikator, nicht Kern-ICP
+  if (COMPETITOR_RE.test(name.toLowerCase())) return false; // Interessenkonflikt
+  if (mitarbeiter == null) return null;
+  return mitarbeiter >= 5 && mitarbeiter <= 100;
+}
+
+function classifyEinwand(
+  acts: Activity[],
+  won: boolean,
+  disq: boolean,
+  reachedDM: boolean,
+): string {
+  if (won) return 'Termin vereinbart';
+  const t = acts.map((a) => `${a.kommentar} ${a.ergebnis}`).join(' ').toLowerCase();
+  if (/agentur|betreut|dienstleister|festen partner/.test(t)) return 'schon Agentur/Partner';
+  if (/datenschutz|dsgvo|cloud|usa|hosting|sicherheit|self-?host/.test(t)) return 'Datenschutz/KI-Skepsis';
+  if (/budget|kosten|zu teuer|preis|kein geld|finanz/.test(t)) return 'kein Budget/Bedarf';
+  if (/entscheid|rücksprache|gremium|vergabe|freigabe|abstimm|vorstand|geschäftsführung/.test(t))
+    return 'Entscheider/Freigabe offen';
+  if (disq) return 'grundsätzlich kein Interesse';
+  if (!reachedDM) return 'nie erreicht';
+  return 'offen / in Bearbeitung';
+}
+
 export function aggregateCompanies(activities: Activity[]): Company[] {
   const byName = new Map<string, Activity[]>();
   for (const a of activities) {
@@ -254,6 +302,10 @@ export function aggregateCompanies(activities: Activity[]): Company[] {
       callsToTermin = terminIdx >= 0 ? terminIdx + 1 : sorted.length;
     }
 
+    const disqualifiziert = sorted.some((a) => a.flags.includes('disqualifiziert'));
+    const mitarbeiter = maxOrNull(sorted.map((a) => a.mitarbeiter));
+    const sektor = classifySektor(name);
+
     companies.push({
       name,
       activities: sorted,
@@ -261,14 +313,17 @@ export function aggregateCompanies(activities: Activity[]): Company[] {
       stage: stageLabelForRank(furthestRank),
       reachedDM,
       won,
-      disqualifiziert: sorted.some((a) => a.flags.includes('disqualifiziert')),
+      disqualifiziert,
       fruehAbriss: !reachedDM && !won,
       callsToTermin,
       umsatz: maxOrNull(sorted.map((a) => a.umsatz)),
-      mitarbeiter: maxOrNull(sorted.map((a) => a.mitarbeiter)),
+      mitarbeiter,
       stadt: sorted.map((a) => a.stadt).find((s) => s) ?? '',
       zugeordnet:
         sorted[sorted.length - 1]?.zugeordnet || sorted[0]?.zugeordnet || '',
+      sektor,
+      icpFit: classifyIcp(mitarbeiter, sektor, name),
+      einwand: classifyEinwand(sorted, won, disqualifiziert, reachedDM),
     });
   }
   return companies;
@@ -336,6 +391,18 @@ function employeeBand(c: Company): string {
   return '250+';
 }
 
+const SEKTOR_ORDER = ['öffentlich', 'privat', 'unklar'];
+function sektorBand(c: Company): string {
+  return c.sektor;
+}
+
+const ICP_ORDER = ['Kern-ICP', 'außerhalb ICP', 'Größe unklar'];
+function icpBand(c: Company): string {
+  if (c.icpFit === true) return 'Kern-ICP';
+  if (c.icpFit === false) return 'außerhalb ICP';
+  return 'Größe unklar';
+}
+
 function mode(values: string[]): string {
   const counts = new Map<string, number>();
   for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
@@ -345,7 +412,10 @@ function mode(values: string[]): string {
   return best;
 }
 
-export function computeKpis(activities: Activity[]): Kpis {
+export function computeKpis(
+  activities: Activity[],
+  opts: { goalPerMonth?: number } = {},
+): Kpis {
   const companies = aggregateCompanies(activities);
   const total = companies.length;
   const won = companies.filter((c) => c.won);
@@ -400,6 +470,32 @@ export function computeKpis(activities: Activity[]): Kpis {
     .sort((x, y) => (x[0] < y[0] ? -1 : 1))
     .map(([date, count]) => ({ date, activities: count }));
 
+  // Einwand-Verteilung (warum (noch) kein Termin)
+  const einwandCounts = new Map<string, number>();
+  for (const c of companies) {
+    einwandCounts.set(c.einwand, (einwandCounts.get(c.einwand) ?? 0) + 1);
+  }
+  const byEinwand = [...einwandCounts.entries()]
+    .map(([label, n]) => ({ label, companies: n }))
+    .sort((a, b) => b.companies - a.companies);
+
+  // Zielerreichung gegenüber Monatsziel
+  const goalPerMonth = opts.goalPerMonth ?? 3;
+  const months =
+    dates.length >= 2
+      ? Math.max(
+          (dates[dates.length - 1].getTime() - dates[0].getTime()) /
+            (1000 * 60 * 60 * 24 * 30.44),
+          0.5,
+        )
+      : 1;
+  const goal = {
+    perMonth: goalPerMonth,
+    months,
+    wonPerMonth: won.length / months,
+    attainment: goalPerMonth > 0 ? won.length / months / goalPerMonth : 0,
+  };
+
   return {
     campaign: mode(activities.map((a) => a.kampagne).filter(Boolean)),
     totalCompanies: total,
@@ -420,12 +516,19 @@ export function computeKpis(activities: Activity[]): Kpis {
     byAkquisiteur: groupCallers(companies),
     byRevenueBand: segment(companies, revenueBand, REV_ORDER),
     byEmployeeBand: segment(companies, employeeBand, EMP_ORDER),
+    bySektor: segment(companies, sektorBand, SEKTOR_ORDER),
+    byIcp: segment(companies, icpBand, ICP_ORDER),
+    byEinwand,
+    goal,
     timeline,
     dateRange: { from: dates[0] ?? null, to: dates[dates.length - 1] ?? null },
   };
 }
 
 /** Bequemer Einstieg: Datei → Kennzahlen. */
-export function analyzeFile(path: string): Kpis {
-  return computeKpis(parseActivities(path));
+export function analyzeFile(
+  path: string,
+  opts?: { goalPerMonth?: number },
+): Kpis {
+  return computeKpis(parseActivities(path), opts);
 }
