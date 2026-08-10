@@ -1,0 +1,43 @@
+// Bündelt die Browser-App (Engine + UI + xlsx) in eine einzige, selbstständige
+// HTML-Datei. Das Logo wird als data-URI eingebettet — kein externer Request.
+import { build } from 'esbuild';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+const res = await build({
+  entryPoints: [join(here, 'main.ts')],
+  bundle: true,
+  format: 'iife',
+  minify: true,
+  write: false,
+  platform: 'browser',
+  target: 'es2019',
+  legalComments: 'none',
+});
+
+// </script> im gebündelten Code neutralisieren, damit es das <script>-Tag nicht schließt.
+const js = res.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+const logo = readFileSync(join(here, 'logo.b64'), 'utf8').trim();
+
+let html = readFileSync(join(here, 'index.html'), 'utf8');
+html = html.replace('__LOGO_B64__', () => logo);
+html = html.replace('<!--BUNDLE-->', () => `<script>${js}</script>`);
+
+mkdirSync(join(here, 'dist'), { recursive: true });
+
+// (1) Vollständiges Dokument — zum lokalen Öffnen / Hosten.
+const full = join(here, 'dist', 'intro-pulse-app.html');
+writeFileSync(full, html);
+
+// (2) Body-Fragment (<style> + Body-Inhalt) — für die Artifact-Veröffentlichung,
+//     die selbst ein <!doctype>/<head>/<body>-Gerüst darum legt.
+const style = html.match(/<style>[\s\S]*?<\/style>/)[0];
+const bodyInner = html.match(/<body>([\s\S]*?)<\/body>/)[1];
+const frag = join(here, 'dist', 'intro-pulse-artifact.html');
+writeFileSync(frag, `${style}\n${bodyInner}`);
+
+console.log(`built ${full} — ${(html.length / 1024).toFixed(0)} KB`);
+console.log(`built ${frag} (Artifact-Fragment)`);

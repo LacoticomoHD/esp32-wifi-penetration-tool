@@ -264,7 +264,7 @@ const FORM_RE = /\b(gmbh|ag|kg|mbh|ug|gbr|ohg|se|kgaa)\b|e\.?\s?k\.?/;
 const COMPETITOR_RE =
   /(agentur|werbe|webdesign|web-design|onlinemarketing|online-marketing|seo-)/;
 
-function classifySektor(name: string): 'öffentlich' | 'privat' | 'unklar' {
+export function classifySektor(name: string): 'öffentlich' | 'privat' | 'unklar' {
   const n = name.toLowerCase();
   if (PUBLIC_WORDS.some((w) => n.includes(w)) || PUBLIC_RE.test(n)) return 'öffentlich';
   if (FORM_RE.test(n)) return 'privat';

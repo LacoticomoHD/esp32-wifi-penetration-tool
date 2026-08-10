@@ -6,13 +6,15 @@
   "description": "INTRO Pulse — Auswertung von Kaltakquise-Kampagnen (INTRO Business Contact GmbH)",
   "scripts": {
     "analyze": "tsx src/cli.ts",
-    "test": "tsx test/engine.test.ts"
+    "test": "tsx test/engine.test.ts",
+    "build:web": "node webapp/build.mjs"
   },
   "dependencies": {
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "esbuild": "^0.24.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

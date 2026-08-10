@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>INTRO Pulse</title>
+<style>
+  :root{
+    --bg:#F4F6F9; --card:#FFFFFF; --ink:#0E2038; --muted:#5C6B7E;
+    --border:#E4E8EE; --track:#EDF1F6; --bar:#2E4A6B;
+    --accent:#FF6F61; --accent-soft:#FFEDEA;
+    --navy:#0E2038; --on-navy:#EAF0F7; --on-navy-dim:#93A6BD;
+    --good:#1B9E6E; --good-soft:#E4F4EE; --warn:#C97E00; --warn-soft:#FBF0DC;
+    --shadow:0 1px 2px rgba(14,32,56,.06), 0 8px 24px rgba(14,32,56,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0A1523; --card:#12233A; --ink:#EAF0F7; --muted:#93A6BD;
+      --border:#243B57; --track:#1A2E48; --bar:#4A6E9B; --accent:#FF7A6D;
+      --accent-soft:#3A2320; --navy:#081121; --on-navy:#EAF0F7; --on-navy-dim:#7E93AD;
+      --good:#3CC48C; --good-soft:#123528; --warn:#E0A63A; --warn-soft:#3A2E14;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A1523; --card:#12233A; --ink:#EAF0F7; --muted:#93A6BD;
+    --border:#243B57; --track:#1A2E48; --bar:#4A6E9B; --accent:#FF7A6D;
+    --accent-soft:#3A2320; --navy:#081121; --on-navy:#EAF0F7; --on-navy-dim:#7E93AD;
+    --good:#3CC48C; --good-soft:#123528; --warn:#E0A63A; --warn-soft:#3A2E14;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-variant-numeric:tabular-nums; line-height:1.5; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1120px; margin:0 auto; padding:0 22px}
+
+  .topbar{background:var(--navy); color:var(--on-navy)}
+  .topbar .wrap{display:flex; align-items:center; gap:16px; padding:15px 22px; flex-wrap:wrap}
+  .brand{display:flex; align-items:center; gap:14px; min-width:0}
+  .brand img.logo{height:26px; width:auto; display:block}
+  .brand .divider{width:1px; height:24px; background:rgba(255,255,255,.18)}
+  .brand .app{display:flex; flex-direction:column; line-height:1.15}
+  .brand .app b{font-size:16px; letter-spacing:.14em; font-weight:700}
+  .brand .app span{font-size:11px; color:var(--on-navy-dim); letter-spacing:.05em}
+  .topbar .spacer{flex:1}
+  .filesel{display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600;
+    background:var(--accent); color:#fff; padding:8px 14px; border:1px solid transparent}
+  .filesel:hover{filter:brightness(1.05)}
+  .meta{font-size:12px; color:var(--on-navy-dim); white-space:nowrap}
+
+  .filterbar{background:var(--card); border-bottom:1px solid var(--border)}
+  .filterbar .wrap{display:flex; align-items:center; gap:9px; padding:10px 22px; flex-wrap:wrap}
+  .flabel{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-right:2px}
+  select.fsel{font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); background:var(--bg);
+    border:1px solid var(--border); padding:7px 10px; cursor:pointer}
+  .filterbar .reset{margin-left:auto; font-size:12px; color:var(--accent); cursor:pointer; text-decoration:none; font-weight:600}
+
+  main{padding:24px 0 8px}
+  .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .sec-head{display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin:26px 0 12px}
+  .sec-head h2{margin:0; font-size:15px; font-weight:700; letter-spacing:-.01em}
+  .sec-head .m{font-size:12px; color:var(--muted)}
+  .card{background:var(--card); border:1px solid var(--border); box-shadow:var(--shadow)}
+
+  .empty{display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px;
+    padding:64px 22px; border:1px dashed var(--border); background:var(--card); margin-top:8px}
+  .empty h2{margin:0; font-size:20px; letter-spacing:-.01em}
+  .empty p{margin:0; color:var(--muted); max-width:46ch; font-size:13.5px}
+  .empty .big{font-size:34px}
+  .empty .filesel{font-size:14px; padding:11px 18px}
+  .empty small{color:var(--muted); font-size:11.5px}
+  .err{color:#fff; background:#D64B45; padding:12px 16px; margin-top:12px; font-size:13px}
+
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr)); gap:14px}
+  .tile{position:relative; padding:18px 18px 16px; overflow:hidden; transition:transform .15s ease}
+  .tile:hover{transform:translateY(-2px)}
+  .tile .lab{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .tile .num{font-size:38px; font-weight:750; letter-spacing:-.03em; margin:8px 0 2px; line-height:1}
+  .tile .sub{font-size:12.5px; color:var(--muted)}
+  .tile.hero::before{content:""; position:absolute; inset:0 0 auto 0; height:3px; background:var(--accent)}
+  .tile.hero .num{color:var(--accent)}
+  .pill{display:inline-block; margin-top:12px; font-size:11px; font-weight:700; letter-spacing:.03em; padding:3px 9px; border:1px solid transparent}
+  .pill.good{color:var(--good); background:var(--good-soft); border-color:color-mix(in srgb,var(--good) 25%,transparent)}
+  .pill.warn{color:var(--warn); background:var(--warn-soft); border-color:color-mix(in srgb,var(--warn) 25%,transparent)}
+  .pill.key{color:var(--accent); background:var(--accent-soft); border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+  .pill.flat{color:var(--muted); background:var(--track); border-color:var(--border)}
+
+  .chart-wrap{padding:18px 20px 16px}
+  .chart-wrap h3{margin:0 0 2px; font-size:14px; font-weight:700}
+  .chart svg{width:100%; height:auto; display:block}
+  .chart .axis{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px}
+  .cap{font-size:12px; color:var(--muted); margin:0}
+
+  .cols{display:grid; grid-template-columns:1.7fr 1fr; gap:14px}
+  .panel{padding:18px 20px 20px}
+  .panel h3{margin:0 0 2px; font-size:14px; font-weight:700}
+  .panel .cap{margin:0 0 16px}
+  .seg{display:flex; flex-direction:column; gap:11px; margin-top:4px}
+  .srow{display:grid; grid-template-columns:150px 1fr 84px; align-items:center; gap:10px}
+  .srow .sname{font-size:12.5px; color:var(--muted)}
+  .srow .strack{height:18px; background:var(--track); overflow:hidden}
+  .srow .sfill{height:100%; width:var(--w); background:var(--bar); animation:grow .8s cubic-bezier(.2,.7,.2,1) both}
+  .srow.best .sfill{background:var(--accent)}
+  .srow.best .sname{color:var(--ink); font-weight:600}
+  .srow .sval{font-size:12.5px; font-weight:700; text-align:right}
+  .srow .sval small{color:var(--muted); font-weight:500}
+  @keyframes grow{from{width:0}to{width:var(--w)}}
+  .insight{margin:14px 0 0; font-size:12.5px; color:var(--muted); border-left:2px solid var(--accent); padding-left:12px}
+  .insight b{color:var(--ink); font-weight:600}
+
+  .drops{display:flex; flex-direction:column; gap:12px}
+  .drop{display:flex; align-items:flex-start; gap:12px}
+  .drop .big{font-size:26px; font-weight:750; letter-spacing:-.02em; line-height:1; min-width:34px}
+  .drop.a .big{color:var(--warn)} .drop.b .big{color:var(--muted)}
+  .drop .txt{font-size:12.5px; color:var(--muted)}
+  .drop .txt b{color:var(--ink); font-weight:600}
+
+  .clist{display:flex; flex-direction:column}
+  .crow{display:grid; grid-template-columns:1fr auto; align-items:center; gap:2px 12px; padding:9px 0; border-bottom:1px solid var(--border)}
+  .crow:last-child{border-bottom:0}
+  .crow .cn{font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .crow .cst{grid-column:1; font-size:11.5px; color:var(--muted)}
+  .crow .cx{grid-row:1 / span 2; font-size:15px; font-weight:750; text-align:right; letter-spacing:-.02em}
+  .crow.flag .cx{color:var(--warn)}
+
+  .ai{padding:20px}
+  .ai .aihead{display:flex; align-items:center; gap:10px; margin-bottom:4px}
+  .ai .badge{font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent);
+    background:var(--accent-soft); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent); padding:3px 8px}
+  .ai h3{margin:0; font-size:14px; font-weight:700}
+  .ai .disc{font-size:11.5px; color:var(--muted); margin:2px 0 0}
+
+  footer{background:var(--navy); color:var(--on-navy-dim); margin-top:30px}
+  footer .wrap{display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 22px; font-size:11.5px; flex-wrap:wrap}
+  footer .l{display:flex; align-items:center; gap:8px}
+  footer .l .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+  @media (max-width:720px){ .cols{grid-template-columns:1fr} .srow{grid-template-columns:120px 1fr 76px} }
+  @media (prefers-reduced-motion: reduce){ .sfill{animation:none} .tile{transition:none} }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap">
+      <div class="brand">
+        <img class="logo" src="data:image/png;base64,__LOGO_B64__" alt="INTRO Business Contact" />
+        <div class="divider"></div>
+        <div class="app"><b>PULSE</b><span>Akquise‑Analyse</span></div>
+      </div>
+      <div class="spacer"></div>
+      <span id="meta" class="meta"></span>
+      <label class="filesel"><input type="file" id="file" accept=".xlsx,.xls,.csv,.tsv" hidden />📂 Datei wählen</label>
+    </div>
+  </div>
+
+  <div id="filterbar" class="filterbar" style="display:none">
+    <div class="wrap">
+      <span class="flabel">Filter</span>
+      <select id="f-akq" class="fsel"></select>
+      <select id="f-sekt" class="fsel">
+        <option value="">Sektor: alle</option>
+        <option value="öffentlich">öffentlich</option>
+        <option value="privat">privat</option>
+        <option value="unklar">unklar</option>
+      </select>
+      <select id="f-erg" class="fsel"></select>
+      <a id="f-reset" class="reset">zurücksetzen</a>
+    </div>
+  </div>
+
+  <main class="wrap">
+    <div id="app">
+      <div class="empty">
+        <div class="big">📈</div>
+        <h2>INTRO Pulse</h2>
+        <p>Lade eine Aktivitätsliste (XLSX oder CSV) hoch — du bekommst sofort ein Live‑Dashboard deiner Kaltakquise. Deine Datei bleibt dabei lokal im Browser.</p>
+        <label class="filesel"><input type="file" id="file2" accept=".xlsx,.xls,.csv,.tsv" hidden />📂 Datei wählen</label>
+        <small>z. B. „Aktivitäten Kamp Viergrad …xlsx"</small>
+        <div id="err"></div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="l"><span class="dot"></span>INTRO Pulse · Phase 1</div>
+      <div>Analyse läuft lokal im Browser · Design &amp; Logo nach intro‑bc.de</div>
+    </div>
+  </footer>
+
+  <!--BUNDLE-->
+</body>
+</html>
