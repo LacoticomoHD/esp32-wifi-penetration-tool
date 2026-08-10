@@ -369,6 +369,37 @@ export function computeKpis(activities: Activity[]): Kpis {
     .filter((d): d is Date => !!d)
     .sort((a, b) => a.getTime() - b.getTime());
 
+  // Bearbeitungs-Intensität: Aktivitäten (Anrufversuche) je Firma
+  const byAttemptsDesc = [...companies].sort(
+    (a, b) => b.activities.length - a.activities.length,
+  );
+  const compactCompany = (c: Company) => ({
+    name: c.name,
+    attempts: c.activities.length,
+    stage: c.stage,
+    won: c.won,
+    reachedDM: c.reachedDM,
+  });
+  const mostContacted = byAttemptsDesc.slice(0, 5).map(compactCompany);
+  const leastContacted = [...byAttemptsDesc].reverse().slice(0, 5).map(compactCompany);
+  // "Schwer zu knacken": viel Aufwand, aber kein Termin
+  const hardCases = byAttemptsDesc
+    .filter((c) => !c.won && !c.disqualifiziert)
+    .slice(0, 5)
+    .map(compactCompany);
+
+  // Tages-Zeitreihe (für Verlauf/Charts)
+  const dayMap = new Map<string, number>();
+  for (const a of activities) {
+    if (a.datum) {
+      const key = a.datum.toISOString().slice(0, 10);
+      dayMap.set(key, (dayMap.get(key) ?? 0) + 1);
+    }
+  }
+  const timeline = [...dayMap.entries()]
+    .sort((x, y) => (x[0] < y[0] ? -1 : 1))
+    .map(([date, count]) => ({ date, activities: count }));
+
   return {
     campaign: mode(activities.map((a) => a.kampagne).filter(Boolean)),
     totalCompanies: total,
@@ -380,11 +411,16 @@ export function computeKpis(activities: Activity[]): Kpis {
     fruehAbrissRate: total ? frueh.length / total : 0,
     fruehAbrissCompanies: frueh.length,
     avgCallsToTermin: avgCalls,
+    avgAttemptsPerCompany: total ? activities.length / total : 0,
     funnel,
     disqualifiziertCompanies: companies.filter((c) => c.disqualifiziert).length,
+    mostContacted,
+    leastContacted,
+    hardCases,
     byAkquisiteur: groupCallers(companies),
     byRevenueBand: segment(companies, revenueBand, REV_ORDER),
     byEmployeeBand: segment(companies, employeeBand, EMP_ORDER),
+    timeline,
     dateRange: { from: dates[0] ?? null, to: dates[dates.length - 1] ?? null },
   };
 }

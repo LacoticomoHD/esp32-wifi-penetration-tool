@@ -65,6 +65,15 @@ export interface SegmentKpi {
   terminQuote: number;
 }
 
+/** Firma verdichtet auf Bearbeitungs-Intensität. */
+export interface CompanyContact {
+  name: string;
+  attempts: number; // Anzahl Aktivitäten (Anrufversuche)
+  stage: string;
+  won: boolean;
+  reachedDM: boolean;
+}
+
 export interface Kpis {
   campaign: string;
   totalCompanies: number;
@@ -76,10 +85,15 @@ export interface Kpis {
   fruehAbrissRate: number;
   fruehAbrissCompanies: number;
   avgCallsToTermin: number | null;
+  avgAttemptsPerCompany: number;
   funnel: { stage: string; rank: number; companies: number }[];
   disqualifiziertCompanies: number;
+  mostContacted: CompanyContact[];
+  leastContacted: CompanyContact[];
+  hardCases: CompanyContact[];
   byAkquisiteur: CallerKpi[];
   byRevenueBand: SegmentKpi[];
   byEmployeeBand: SegmentKpi[];
+  timeline: { date: string; activities: number }[];
   dateRange: { from: Date | null; to: Date | null };
 }

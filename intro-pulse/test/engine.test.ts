@@ -58,6 +58,13 @@ check('1 disqualifizierte Firma (Gamma)', k.disqualifiziertCompanies === 1);
 const revBands = Object.fromEntries(k.byRevenueBand.map((s) => [s.label, s]));
 check('Umsatz-Klasse 1–10 Mio: 1/2 Termine', revBands['1–10 Mio €']?.won === 1 && revBands['1–10 Mio €']?.companies === 2, JSON.stringify(revBands['1–10 Mio €']));
 
+console.log('\nBearbeitung & schwierige Fälle');
+check('Ø Anrufversuche = 1.75', approx(k.avgAttemptsPerCompany, 1.75), String(k.avgAttemptsPerCompany));
+check('Meist bearbeitet = Alpha (3×)', k.mostContacted[0]?.name === 'Alpha GmbH' && k.mostContacted[0]?.attempts === 3, JSON.stringify(k.mostContacted[0]));
+check('Schwerster Fall = Beta (2×, kein Termin)', k.hardCases[0]?.name === 'Beta AG' && k.hardCases[0]?.attempts === 2, JSON.stringify(k.hardCases[0]));
+check('Disqualifizierte nicht in hardCases', !k.hardCases.some((c) => c.name === 'Gamma GmbH'));
+check('Timeline summiert 7 Aktivitäten', k.timeline.reduce((n, d) => n + d.activities, 0) === 7, JSON.stringify(k.timeline));
+
 console.log('');
 if (failures) {
   console.error(`FEHLGESCHLAGEN: ${failures} Prüfung(en).`);

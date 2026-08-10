@@ -35,6 +35,7 @@ function report(k: Kpis): string {
   L.push(`    Entscheider-Quote:  ${pct(k.entscheiderQuote)}   (${k.reachedDMCompanies} Firmen)`);
   L.push(`    Früh-Abriss-Rate:   ${pct(k.fruehAbrissRate)}   (${k.fruehAbrissCompanies} Firmen nie einen Entscheider erreicht)`);
   L.push(`    Disqualifiziert:    ${k.disqualifiziertCompanies} Firmen`);
+  L.push(`    Ø Anrufversuche:    ${k.avgAttemptsPerCompany.toFixed(1)} je Firma`);
   L.push('');
   L.push('  ── Funnel (Firmen je weitester Stufe) ────────────────────');
   const maxF = Math.max(...k.funnel.map((f) => f.companies), 1);
@@ -46,6 +47,17 @@ function report(k: Kpis): string {
   L.push('  ── Je Akquisiteur ────────────────────────────────────────');
   for (const c of k.byAkquisiteur) {
     L.push(`    ${c.name.padEnd(22)} Termin-Quote ${pct(c.terminQuote).padStart(7)}  (${c.won}/${c.companies} Firmen, ${c.activities} Aktivitäten)`);
+  }
+  L.push('');
+  L.push('  ── Bearbeitung (Anrufversuche je Firma) ──────────────────');
+  L.push('    Meist bearbeitet:');
+  for (const c of k.mostContacted) {
+    L.push(`      ${c.name.slice(0, 34).padEnd(34)} ${String(c.attempts).padStart(2)}×  → ${c.stage}${c.won ? ' ✅' : ''}`);
+  }
+  L.push('');
+  L.push('  ── Schwer zu knacken (viel Aufwand, kein Termin) ─────────');
+  for (const c of k.hardCases) {
+    L.push(`      ${c.name.slice(0, 34).padEnd(34)} ${String(c.attempts).padStart(2)}×  → ${c.stage}${c.reachedDM ? ' (Entscheider erreicht)' : ''}`);
   }
   L.push('');
   L.push('  ── Termin-Quote je Umsatz-Klasse ─────────────────────────');
