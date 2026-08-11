@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
+    "@supabase/supabase-js": "^2.112.2",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
