@@ -95,6 +95,13 @@ Deno.serve(async (req: Request) => {
         ]
       : [{ role: "user", content: [...docs, { type: "text", text: analyzeUser(p.report) }] }];
 
+  // Sonnet 5 / Opus 5 denken per Default nach. Großzügiges max_tokens verhindert,
+  // dass das Nachdenken die eigentliche Antwort verdrängt (sonst: leeres Ergebnis).
+  // Niedriger Effort hält Sonnet/Opus schnell; Haiku 4.5 kennt kein Effort.
+  // deno-lint-ignore no-explicit-any
+  const body: Record<string, any> = { model, max_tokens: 8000, system, messages };
+  if (model !== "claude-haiku-4-5") body.output_config = { effort: "low" };
+
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -103,7 +110,7 @@ Deno.serve(async (req: Request) => {
         "x-api-key": key,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({ model, max_tokens: 2500, system, messages }),
+      body: JSON.stringify(body),
     });
     const data = await r.json();
     if (!r.ok) {
