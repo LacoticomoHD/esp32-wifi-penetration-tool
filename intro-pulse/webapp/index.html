@@ -173,6 +173,21 @@
   .ki-input{display:flex; gap:8px; margin-top:12px}
   .ki-qin{flex:1; min-width:0; font:inherit; font-size:13px; color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:9px 12px}
   .ki-qin:focus{outline:none; border-color:var(--accent)}
+  .ki-docs-row{display:flex; align-items:center; gap:12px; margin-top:14px; flex-wrap:wrap}
+  .ki-filesbtn{display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:12.5px; font-weight:700;
+    color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:8px 13px}
+  .ki-filesbtn:hover{border-color:var(--accent)}
+  .ki-docs-hint{font-size:11.5px; color:var(--muted)}
+  .ki-doclist{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+  .ki-doclist:empty{display:none}
+  .ki-doc{display:inline-flex; align-items:center; gap:7px; max-width:100%; font-size:12px; color:var(--ink);
+    background:var(--accent-soft); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent); padding:5px 6px 5px 9px}
+  .ki-doc-ic{flex:none}
+  .ki-doc-n{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:34ch}
+  .ki-doc-x{flex:none; border:none; background:transparent; color:var(--muted); cursor:pointer; font-size:16px; line-height:1; padding:0 3px}
+  .ki-doc-x:hover{color:var(--accent)}
+  .ki-docerr{font-size:12px; color:var(--warn); margin-top:8px}
+  .ki-docerr:empty{display:none}
 
   @media (max-width:720px){ .cols{grid-template-columns:1fr} .srow{grid-template-columns:120px 1fr 76px}
     .ki-controls{align-items:stretch} .ki-field{width:100%} .ki-btn{width:100%} }
@@ -237,6 +252,12 @@
           </label>
           <button id="ki-run" class="ki-btn">✨ Analyse starten</button>
         </div>
+        <div class="ki-docs-row">
+          <label class="ki-filesbtn"><input type="file" id="ki-docs" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.tsv,.txt,.md,.png,.jpg,.jpeg,.gif,.webp" hidden />📎 Kontext‑Dateien anhängen</label>
+          <span class="ki-docs-hint">PDF · Word · Excel · Bilder (JPG/PNG) — Claude nutzt sie als Zusatzkontext</span>
+        </div>
+        <div id="ki-doclist" class="ki-doclist"></div>
+        <div id="ki-docerr" class="ki-docerr"></div>
         <details class="ki-steck-wrap">
           <summary>Projekt‑Steckbrief als Kontext für Claude — optional, wird nur lokal gespeichert</summary>
           <textarea id="ki-steck" class="ki-ta" placeholder="Wer ist der Kunde? Zielgruppe/ICP, Angebot, typische Einwände, Kampagnenziel … Je mehr Kontext, desto treffsicherer die Analyse."></textarea>

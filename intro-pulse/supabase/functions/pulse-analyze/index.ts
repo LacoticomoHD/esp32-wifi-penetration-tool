@@ -46,6 +46,26 @@ function analyzeUser(report: unknown): string {
   ].join("\n");
 }
 
+// Angehängte Kontext-Dateien → Claude-Content-Blöcke.
+// PDF/Bild als base64, Office/CSV als bereits im Browser extrahierter Text.
+// deno-lint-ignore no-explicit-any
+function attachmentBlocks(atts: any): any[] {
+  if (!Array.isArray(atts)) return [];
+  // deno-lint-ignore no-explicit-any
+  const out: any[] = [];
+  for (const a of atts) {
+    if (!a) continue;
+    if (a.kind === "pdf" && a.data) {
+      out.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: a.data } });
+    } else if (a.kind === "image" && a.data) {
+      out.push({ type: "image", source: { type: "base64", media_type: a.media_type || "image/png", data: a.data } });
+    } else if (a.kind === "text" && a.text) {
+      out.push({ type: "text", text: `--- Angehängte Datei: ${a.name || "Dokument"} ---\n${String(a.text).slice(0, 200000)}` });
+    }
+  }
+  return out;
+}
+
 // deno-lint-ignore no-explicit-any
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -64,15 +84,16 @@ Deno.serve(async (req: Request) => {
 
   const model: string = p.model || "claude-sonnet-5";
   const system = systemPrompt(p.steckbrief);
+  const docs = attachmentBlocks(p.attachments);
   const messages =
     p.mode === "chat"
       ? [
-          { role: "user", content: `Kampagnendaten (JSON):\n\`\`\`json\n${JSON.stringify(p.report)}\n\`\`\`` },
-          { role: "assistant", content: "Verstanden — ich habe die Kampagnendaten vorliegen. Was möchtest du wissen?" },
+          { role: "user", content: [...docs, { type: "text", text: `Kampagnendaten (JSON):\n\`\`\`json\n${JSON.stringify(p.report)}\n\`\`\`` }] },
+          { role: "assistant", content: "Verstanden — ich habe die Kampagnendaten und ggf. die angehängten Dokumente vorliegen. Was möchtest du wissen?" },
           ...(Array.isArray(p.history) ? p.history : []),
           { role: "user", content: String(p.question || "") },
         ]
-      : [{ role: "user", content: analyzeUser(p.report) }];
+      : [{ role: "user", content: [...docs, { type: "text", text: analyzeUser(p.report) }] }];
 
   try {
     const r = await fetch("https://api.anthropic.com/v1/messages", {

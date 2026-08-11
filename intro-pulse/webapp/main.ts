@@ -8,11 +8,13 @@ import {
   classifySektor,
 } from '../src/engine';
 import type { Activity, Kpis } from '../src/types';
+import { readAttachment, type DocAttachment } from './src/attachments';
 
 let allActivities: Activity[] = [];
 let currentKpis: Kpis | null = null;
 let currentActs: Activity[] = [];
 let chatHistory: { role: string; content: string }[] = [];
+let kiAttachments: DocAttachment[] = [];
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const appEl = () => $('app');
@@ -230,6 +232,33 @@ function showKI() {
 }
 function hideKI() { const sec = document.getElementById('kisec'); if (sec) sec.style.display = 'none'; }
 
+// ---- Kontext-Dateien (Anhänge für die KI) -----------------------------------
+const MAX_TOTAL_DOCS = 12 * 1024 * 1024; // ~12 MB Rohdaten insgesamt
+function renderDocs() {
+  const list = document.getElementById('ki-doclist');
+  if (!list) return;
+  list.innerHTML = kiAttachments
+    .map((a, i) => {
+      const ic = a.kind === 'image' ? '🖼️' : a.kind === 'pdf' ? '📄' : '📊';
+      return `<span class="ki-doc"><span class="ki-doc-ic">${ic}</span><span class="ki-doc-n">${esc(a.name)}</span><button class="ki-doc-x" data-i="${i}" title="entfernen" aria-label="entfernen">×</button></span>`;
+    })
+    .join('');
+  list.querySelectorAll<HTMLButtonElement>('.ki-doc-x').forEach((b) =>
+    b.addEventListener('click', () => { kiAttachments.splice(Number(b.dataset.i), 1); renderDocs(); }),
+  );
+}
+async function addDocs(files: FileList) {
+  const err = document.getElementById('ki-docerr');
+  if (err) err.textContent = '';
+  for (const f of Array.from(files)) {
+    const total = kiAttachments.reduce((s, a) => s + a.bytes, 0);
+    if (total + f.size > MAX_TOTAL_DOCS) { if (err) err.textContent = `„${f.name}" übersprungen — insgesamt max. 12 MB Anhänge.`; continue; }
+    try { kiAttachments.push(await readAttachment(f)); }
+    catch (e) { if (err) err.textContent = (e as Error).message; }
+  }
+  renderDocs();
+}
+
 function buildReport() {
   const k = currentKpis!;
   const notizen = currentActs
@@ -284,7 +313,7 @@ async function runAnalysis() {
   localStorage.setItem('ki-steck', steckbrief); localStorage.setItem('ki-model', model);
   btn.disabled = true;
   out.innerHTML = '<div class="ki-loading">Claude analysiert den Report …</div>';
-  try { out.innerHTML = md(await callKI({ mode: 'analyze', model, steckbrief, report: buildReport() })); }
+  try { out.innerHTML = md(await callKI({ mode: 'analyze', model, steckbrief, report: buildReport(), attachments: kiAttachments })); }
   catch (e) { out.innerHTML = `<div class="err">${esc((e as Error).message)}</div>`; }
   finally { btn.disabled = false; }
 }
@@ -302,7 +331,7 @@ async function runChat() {
   const aEl = log.lastElementChild as HTMLElement;
   log.scrollTop = log.scrollHeight;
   try {
-    const text = await callKI({ mode: 'chat', model, steckbrief, report: buildReport(), history: chatHistory, question: q });
+    const text = await callKI({ mode: 'chat', model, steckbrief, report: buildReport(), history: chatHistory, question: q, attachments: kiAttachments });
     chatHistory.push({ role: 'user', content: q }, { role: 'assistant', content: text });
     if (chatHistory.length > 12) chatHistory = chatHistory.slice(-12);
     aEl.className = 'ki-a'; aEl.innerHTML = md(text);
@@ -313,3 +342,8 @@ async function runChat() {
 document.getElementById('ki-run')?.addEventListener('click', runAnalysis);
 document.getElementById('ki-ask')?.addEventListener('click', runChat);
 document.getElementById('ki-q')?.addEventListener('keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter') runChat(); });
+document.getElementById('ki-docs')?.addEventListener('change', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (el.files && el.files.length) addDocs(el.files);
+  el.value = '';
+});
