@@ -253,8 +253,11 @@ function buildReport() {
     gespraechsnotizen: notizen,
   };
 }
+// Endpoint der KI-Analyse: gehostete Supabase-Funktion (zur Build-Zeit gesetzt)
+// oder – beim lokalen `npm run dev` – der eigene Server unter /api/analyze.
+const KI_ENDPOINT = (globalThis as { __PULSE_KI_ENDPOINT__?: string }).__PULSE_KI_ENDPOINT__ || '/api/analyze';
 async function callKI(payload: Record<string, unknown>): Promise<string> {
-  const res = await fetch('/api/analyze', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
+  const res = await fetch(KI_ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await res.json().catch(() => ({ error: 'Ungültige Antwort vom Server.' }));
   if (!res.ok || data.error) throw new Error(data.error || `Server-Fehler ${res.status}`);
   return data.text as string;

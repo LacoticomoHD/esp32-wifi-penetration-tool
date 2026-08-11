@@ -7,6 +7,13 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+// KI-Endpoint: gehostete Supabase-Funktion. Öffentliche URL (kein Secret) —
+// der API-Key liegt serverseitig als Supabase-Secret, nie hier. Per Env
+// überschreibbar, falls das Projekt mal wechselt.
+const KI_ENDPOINT =
+  process.env.PULSE_KI_ENDPOINT ||
+  'https://coydygpnumqxxealikqb.supabase.co/functions/v1/pulse-analyze';
+
 const res = await build({
   entryPoints: [join(here, 'main.ts')],
   bundle: true,
@@ -24,7 +31,10 @@ const logo = readFileSync(join(here, 'logo.b64'), 'utf8').trim();
 
 let html = readFileSync(join(here, 'index.html'), 'utf8');
 html = html.replace('__LOGO_B64__', () => logo);
-html = html.replace('<!--BUNDLE-->', () => `<script>${js}</script>`);
+html = html.replace(
+  '<!--BUNDLE-->',
+  () => `<script>window.__PULSE_KI_ENDPOINT__=${JSON.stringify(KI_ENDPOINT)}</script>\n<script>${js}</script>`,
+);
 
 mkdirSync(join(here, 'dist'), { recursive: true });
 
