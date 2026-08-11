@@ -49,5 +49,14 @@ const bodyInner = html.match(/<body>([\s\S]*?)<\/body>/)[1];
 const frag = join(here, 'dist', 'intro-pulse-artifact.html');
 writeFileSync(frag, `${style}\n${bodyInner}`);
 
+// (3) GitHub-Pages-Kopie: dieselbe App unter <repo>/docs/index.html, damit ein
+//     teilbarer Link (ohne Login) funktioniert. .nojekyll umgeht Jekyll, sonst
+//     würde GitHub Pages die Seite durch den Jekyll-Build schicken.
+const pagesDir = join(here, '..', '..', 'docs');
+mkdirSync(pagesDir, { recursive: true });
+writeFileSync(join(pagesDir, 'index.html'), html);
+writeFileSync(join(pagesDir, '.nojekyll'), '');
+
 console.log(`built ${full} — ${(html.length / 1024).toFixed(0)} KB`);
 console.log(`built ${frag} (Artifact-Fragment)`);
+console.log(`built ${join(pagesDir, 'index.html')} (GitHub Pages)`);
