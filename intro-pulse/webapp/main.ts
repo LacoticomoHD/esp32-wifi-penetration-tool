@@ -35,8 +35,8 @@ const fmtDate = (d: Date | null) => (d ? d.toLocaleDateString('de-DE') : '—');
 const tile = (cls: string, lab: string, num: string, sub: string, pill: string) =>
   `<div class="card tile ${cls}"><div class="lab">${lab}</div><div class="num">${num}</div><div class="sub">${sub}</div>${pill}</div>`;
 const pill = (cls: string, txt: string) => `<span class="pill ${cls}">${esc(txt)}</span>`;
-const bar = (name: string, w: number, val: string, best = false, labW = 150) =>
-  `<div class="srow${best ? ' best' : ''}" style="grid-template-columns:${labW}px 1fr 84px">` +
+const bar = (name: string, w: number, val: string, best = false, labW = 150, won = false) =>
+  `<div class="srow${best ? ' best' : ''}${won ? ' won' : ''}" style="grid-template-columns:${labW}px 1fr 84px">` +
   `<span class="sname">${esc(name)}</span>` +
   `<span class="strack"><span class="sfill" style="--w:${Math.max(w, 1).toFixed(0)}%"></span></span>` +
   `<span class="sval">${val}</span></div>`;
@@ -56,7 +56,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
   const funnelRows = k.funnel
     .filter((f) => f.rank > 0)
     .map((f) =>
-      bar(f.stage, (f.companies / funnelMax) * 100, `${f.companies} <small>Firmen</small>`, f.rank === 4),
+      bar(f.stage, (f.companies / funnelMax) * 100, `${f.companies} <small>Firmen</small>`, false, 150, f.rank === 4),
     )
     .join('');
 
