@@ -8,6 +8,7 @@ import {
   classifySektor,
 } from '../src/engine';
 import type { Activity, Kpis } from '../src/types';
+import { diffKpis, type KpiDelta } from '../src/compare';
 import { readAttachment, type DocAttachment } from './src/attachments';
 
 interface Empfehlung { titel: string; detail?: string; prio?: 'hoch' | 'mittel' | 'niedrig' }
@@ -20,6 +21,12 @@ let chatHistory: { role: string; content: string }[] = [];
 let kiAttachments: DocAttachment[] = [];
 let currentEmpfehlungen: Empfehlung[] = [];
 let currentChecklistScope = '';
+let lastFullKpis: Kpis | null = null;             // KPIs des geladenen Reports (ungefiltert)
+let snapshotDeltas: KpiDelta[] = [];              // aktueller Vergleich (leer = keiner)
+let comparePrevLabel = '';                        // Beschreibung des Vergleichs-Vorreports
+let manualPrev: { kpis: Kpis; label: string } | null = null; // manuell gewählter Vorreport
+let autoPrev: SnapStore | null = null;            // Vorstand aus localStorage, bei Datei-Load erfasst
+let autoPrevSame = false;                          // war der letzte Upload derselbe Datenstand?
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const appEl = () => $('app');
@@ -97,13 +104,21 @@ function renderDashboard(k: Kpis, activityCount: number) {
     ? `<b>Alle ${k.wonCompanies} Termine kommen aus „${bestSekt?.label}".</b> Im Kern‑ICP (5–100 MA, privat) steht bisher kein Termin.`
     : `Beste Termin‑Quote: <b>${bestSekt?.label}</b>.`;
 
+  const compareMeta = filtersActive()
+    ? 'gefiltert · Vergleich gilt für die Gesamtkampagne'
+    : comparePrevLabel === 'erster Stand'
+      ? 'Erster Stand — lade einen weiteren Report für den Vergleich'
+      : comparePrevLabel === 'gleicher Stand wie zuletzt'
+        ? 'Unverändert zum letzten Upload'
+        : `Δ zum Vorreport · ${esc(comparePrevLabel)}${manualPrev ? ' · <a id="cmp-clear" class="cmp-clear">↺ zurück zum Auto‑Vergleich</a>' : ''}`;
+
   appEl().innerHTML = `
-    ${secHead('Kampagnen‑Überblick', 'Wie steht die Kampagne?', `Δ zum Vorreport: — (erster Stand)`)}
+    ${secHead('Kampagnen‑Überblick', 'Wie steht die Kampagne?', compareMeta)}
     <div class="kpis">
-      ${tile('hero', 'Termin‑Quote', pct(k.terminQuote), `${k.wonCompanies} von ${k.totalCompanies} Firmen`, pill('key', 'Kern‑KPI'))}
+      ${tile('hero', 'Termin‑Quote', pct(k.terminQuote), `${k.wonCompanies} von ${k.totalCompanies} Firmen${deltaBadge('terminQuote')}`, pill('key', 'Kern‑KPI'))}
       ${tile('', 'Ø Anrufe bis Termin', k.avgCallsToTermin != null ? dec(k.avgCallsToTermin) : '—', 'je gewonnener Firma', pill('flat', `Ø ${dec(k.avgAttemptsPerCompany)} Versuche/Firma`))}
-      ${tile('', 'Entscheider‑Quote', pct(k.entscheiderQuote), `${k.reachedDMCompanies} von ${k.totalCompanies} erreicht`, pill('good', 'stark'))}
-      ${tile('', 'Früh‑Abriss', pct(k.fruehAbrissRate), `${k.fruehAbrissCompanies} nie beim Entscheider`, pill('warn', 'beobachten'))}
+      ${tile('', 'Entscheider‑Quote', pct(k.entscheiderQuote), `${k.reachedDMCompanies} von ${k.totalCompanies} erreicht${deltaBadge('entscheiderQuote')}`, pill('good', 'stark'))}
+      ${tile('', 'Früh‑Abriss', pct(k.fruehAbrissRate), `${k.fruehAbrissCompanies} nie beim Entscheider${deltaBadge('fruehAbrissRate')}`, pill('warn', 'beobachten'))}
     </div>
 
     ${secHead('Verlauf', 'Aktivitäten im Zeitverlauf', `Ziel ${k.goal.perMonth} Termine/Monat`)}
@@ -144,6 +159,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
   `;
 
   drawTimeline(k.timeline);
+  document.getElementById('cmp-clear')?.addEventListener('click', (e) => { e.preventDefault(); clearCompare(); });
 }
 
 function drawTimeline(timeline: { date: string; activities: number }[]) {
@@ -199,12 +215,95 @@ function apply() {
   showKI();
 }
 
+// ---- Snapshot-Vergleich ("was hat sich seit dem letzten Report geändert?") --
+// Zwei Wege: (a) Auto-Vergleich mit dem zuletzt hochgeladenen Report derselben
+// Kampagne (im Browser via localStorage gemerkt) und (b) manuell zwei Dateien.
+// Verglichen werden immer die UNGEFILTERTEN Kennzahlen (ganze Kampagne).
+const SNAP_KEY = 'pulse-snapshots';
+// Nur die Skalar-Felder, die diffKpis() liest — klein & JSON-tauglich.
+function slimKpis(k: Kpis) {
+  return {
+    terminQuote: k.terminQuote, wonCompanies: k.wonCompanies, entscheiderQuote: k.entscheiderQuote,
+    fruehAbrissRate: k.fruehAbrissRate, avgAttemptsPerCompany: k.avgAttemptsPerCompany,
+    totalCompanies: k.totalCompanies, goal: { attainment: k.goal.attainment },
+  };
+}
+interface SnapStore { sig: string; rangeLabel: string; savedAt: number; kpis: ReturnType<typeof slimKpis> }
+function snapSig(k: Kpis): string {
+  return [fmtDate(k.dateRange.from), fmtDate(k.dateRange.to), k.totalActivities, k.totalCompanies, k.wonCompanies].join('|');
+}
+function loadSnapshots(): Record<string, SnapStore> {
+  try { return JSON.parse(localStorage.getItem(SNAP_KEY) || '{}'); } catch { return {}; }
+}
+function saveSnapshot(k: Kpis, sig: string) {
+  const all = loadSnapshots();
+  all[k.campaign || ''] = { sig, rangeLabel: `${fmtDate(k.dateRange.from)}–${fmtDate(k.dateRange.to)}`, savedAt: Date.now(), kpis: slimKpis(k) };
+  try { localStorage.setItem(SNAP_KEY, JSON.stringify(all)); } catch { /* localStorage evtl. voll/gesperrt */ }
+}
+// Einmal je Datei-Load: den gespeicherten Vorstand erfassen und den aktuellen
+// Stand als neuen "letzter Upload" merken (für den NÄCHSTEN Upload).
+function prepareComparison() {
+  if (!lastFullKpis) { autoPrev = null; autoPrevSame = false; return; }
+  const curr = lastFullKpis;
+  const sig = snapSig(curr);
+  const prev = loadSnapshots()[curr.campaign || '']; // VOR dem Speichern lesen
+  autoPrev = prev && prev.sig !== sig ? prev : null;  // nur ein ECHTER Vorstand
+  autoPrevSame = !!(prev && prev.sig === sig);
+  saveSnapshot(curr, sig);
+}
+// Setzt snapshotDeltas + comparePrevLabel — nutzt manuellen ODER erfassten Auto-Vorstand.
+function updateComparison() {
+  if (!lastFullKpis) { snapshotDeltas = []; comparePrevLabel = ''; return; }
+  const curr = lastFullKpis;
+  if (manualPrev) {
+    snapshotDeltas = diffKpis(curr, manualPrev.kpis);
+    comparePrevLabel = manualPrev.label;
+  } else if (autoPrev) {
+    snapshotDeltas = diffKpis(curr, autoPrev.kpis as unknown as Kpis);
+    comparePrevLabel = `letzter Upload · ${autoPrev.rangeLabel}`;
+  } else {
+    snapshotDeltas = diffKpis(curr, null);
+    comparePrevLabel = autoPrevSame ? 'gleicher Stand wie zuletzt' : 'erster Stand';
+  }
+}
+// Δ-Anzeige für eine Kennzahl (nur im ungefilterten Blick sichtbar).
+const filtersActive = () => !!(fAkq().value || fSekt().value || fErg().value);
+function deltaBadge(key: string): string {
+  if (filtersActive()) return '';
+  const d = snapshotDeltas.find((x) => x.key === key);
+  if (!d || d.delta == null || d.delta === 0) return '';
+  const cls = d.improved ? 'up' : 'down'; // Farbe = Qualität (grün besser / rot schlechter)
+  const arrow = d.delta > 0 ? '▲' : '▼';  // Pfeil = Richtung der Zahl
+  const s = d.delta > 0 ? '+' : '−';
+  const mag = Math.abs(d.delta);
+  const val = d.unit === 'pct' ? `${dec(mag * 100)} Pp` : d.unit === 'count' ? `${mag}` : `${dec(mag)}`;
+  return ` <span class="dlt ${cls}" title="seit ${esc(comparePrevLabel)}">${arrow} ${s}${val}</span>`;
+}
+async function loadCompareFile(file: File) {
+  try {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const acts = parseActivitiesFromBuffer(buf, file.name);
+    if (acts.length === 0) throw new Error('Keine Aktivitäten in der Vergleichsdatei gefunden.');
+    manualPrev = { kpis: computeKpis(acts, { goalPerMonth: 3 }), label: `Datei „${file.name}"` };
+    updateComparison();
+    apply();
+  } catch (e) {
+    comparePrevLabel = `Vergleich fehlgeschlagen: ${e instanceof Error ? e.message : String(e)}`;
+    apply();
+  }
+}
+function clearCompare() { manualPrev = null; updateComparison(); apply(); }
+
 // ---- Datei-Upload -----------------------------------------------------------
 async function loadFile(file: File) {
   try {
     const buf = new Uint8Array(await file.arrayBuffer());
     allActivities = parseActivitiesFromBuffer(buf, file.name);
     if (allActivities.length === 0) throw new Error('Keine Aktivitäten in der Datei gefunden. Erwartet werden Spalten wie „Firma/Account", „Ergebnis" …');
+    manualPrev = null; // neuer Report → zurück zum Auto-Vergleich (letzter Upload)
+    lastFullKpis = computeKpis(allActivities, { goalPerMonth: 3 });
+    prepareComparison();
+    updateComparison();
     populateFilters();
     filterbar().style.display = '';
     apply();
@@ -223,6 +322,11 @@ function wireInput(id: string) {
 }
 wireInput('file');
 wireInput('file2');
+document.getElementById('f-cmp')?.addEventListener('change', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (el.files && el.files[0]) loadCompareFile(el.files[0]);
+  el.value = '';
+});
 [fAkq(), fSekt(), fErg()].forEach((s) => s.addEventListener('change', apply));
 $('f-reset').addEventListener('click', (e) => { e.preventDefault(); fAkq().value = ''; fSekt().value = ''; fErg().value = ''; apply(); });
 

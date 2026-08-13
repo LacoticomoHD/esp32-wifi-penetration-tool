@@ -58,6 +58,14 @@
   .printbtn{font:inherit; font-size:12.5px; font-weight:700; color:#fff; background:var(--accent);
     border:1px solid transparent; padding:7px 12px; cursor:pointer; margin-left:12px}
   .printbtn:hover{filter:brightness(1.05)}
+  .cmpbtn{display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-size:12.5px; font-weight:700;
+    color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:7px 12px; margin-left:10px}
+  .cmpbtn:hover{border-color:var(--accent)}
+  .cmp-clear{color:var(--accent); cursor:pointer; font-weight:600; text-decoration:none}
+  .dlt{display:inline-block; margin-left:3px; font-size:10.5px; font-weight:700; padding:1px 6px;
+    border:1px solid transparent; letter-spacing:.02em; white-space:nowrap}
+  .dlt.up{color:var(--good); background:var(--good-soft); border-color:color-mix(in srgb,var(--good) 28%,transparent)}
+  .dlt.down{color:#fff; background:#D64B45}
 
   main{padding:24px 0 8px}
   .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700}
@@ -240,7 +248,7 @@
     /* Bedien-Elemente ausblenden — es soll ein Report werden, keine App */
     .topbar .filesel, .filterbar, #f-print,
     .ki-controls, .ki-docs-row, #ki-doclist, #ki-docerr, .ki-steck-wrap, .ki-chat,
-    .ki-cl-hint, .empty .filesel, #kisec .sec-head .m{ display:none !important }
+    .ki-cl-hint, .cmp-clear, .empty .filesel, #kisec .sec-head .m{ display:none !important }
     /* Ohne gelaufene Analyse: KI-Abschnitt ganz weglassen */
     body.print-no-ki #kisec{ display:none !important }
     /* Topbar als schlanker Marken-Kopf */
@@ -291,6 +299,7 @@
       </select>
       <select id="f-erg" class="fsel"></select>
       <a id="f-reset" class="reset">zurücksetzen</a>
+      <label class="cmpbtn" title="Diesen Report mit einem früheren vergleichen"><input type="file" id="f-cmp" accept=".xlsx,.xls,.csv,.tsv" hidden />⇄ Vergleichen</label>
       <button id="f-print" class="printbtn" type="button" title="Aktuelle Ansicht als PDF speichern oder drucken">📄 Als PDF speichern</button>
     </div>
   </div>
