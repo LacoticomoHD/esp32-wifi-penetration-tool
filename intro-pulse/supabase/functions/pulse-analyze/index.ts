@@ -41,9 +41,45 @@ function analyzeUser(report: unknown): string {
     "## Was lief gut",
     "## Warum (noch) keine Termine",
     "## Früh-Abriss & schwer zu knackende Firmen",
-    "## Konkrete Empfehlungen (max. 4, priorisiert)",
     "Nutze den Projekt-Steckbrief für die Deutung (Zielsegment/ICP, Einwände, Angebot, Kampagnenziel).",
+    "",
+    "Gib DANACH – und nur danach, ohne weiteren Text – die konkreten Handlungsempfehlungen",
+    "als maschinenlesbaren JSON-Block aus: max. 5 Stück, nach Priorität sortiert (wichtigste zuerst),",
+    "exakt in dieser Form:",
+    "```json",
+    '{"empfehlungen":[{"titel":"kurze, konkrete Handlung","detail":"1 Satz warum/wie – mit Zahlenbezug","prio":"hoch"}]}',
+    "```",
+    'Erlaubte prio-Werte: "hoch", "mittel", "niedrig". Keine weiteren Felder, keine Kommentare, gültiges JSON.',
   ].join("\n");
+}
+
+// Aus Claudes Antwort den abschließenden ```json-Block mit den Empfehlungen
+// herauslösen. Robust: nimmt den LETZTEN json-Block; bei kaputtem JSON bleibt
+// die Prosa unverändert und die Checkliste einfach leer.
+// deno-lint-ignore no-explicit-any
+function extractEmpfehlungen(text: string): { clean: string; empfehlungen: any[] } {
+  const fences = [...text.matchAll(/```json\s*([\s\S]*?)```/gi)];
+  if (!fences.length) return { clean: text, empfehlungen: [] };
+  const m = fences[fences.length - 1];
+  // deno-lint-ignore no-explicit-any
+  let empfehlungen: any[] = [];
+  try {
+    const parsed = JSON.parse((m[1] || "").trim());
+    const arr = Array.isArray(parsed) ? parsed : parsed?.empfehlungen;
+    if (Array.isArray(arr)) {
+      empfehlungen = arr
+        // deno-lint-ignore no-explicit-any
+        .slice(0, 6).map((e: any) => ({
+          titel: String(e?.titel ?? e?.title ?? "").trim().slice(0, 200),
+          detail: String(e?.detail ?? e?.warum ?? "").trim().slice(0, 400),
+          prio: ["hoch", "mittel", "niedrig"].includes(e?.prio) ? e.prio : "mittel",
+        }))
+        .filter((e) => e.titel);
+    }
+  } catch { /* kaputtes JSON → keine Checkliste, Prosa bleibt */ }
+  const idx = m.index ?? text.lastIndexOf(m[0]);
+  const clean = (text.slice(0, idx) + text.slice(idx + m[0].length)).replace(/\n{3,}/g, "\n\n").trim();
+  return { clean, empfehlungen };
 }
 
 // Angehängte Kontext-Dateien → Claude-Content-Blöcke.
@@ -123,7 +159,10 @@ Deno.serve(async (req: Request) => {
       .map((b: any) => b.text)
       .join("\n")
       .trim();
-    return json(200, { text, model: data.model });
+    if (p.mode === "chat") return json(200, { text, model: data.model });
+    // Analyse-Modus: Empfehlungen als strukturierte Liste separat zurückgeben.
+    const { clean, empfehlungen } = extractEmpfehlungen(text);
+    return json(200, { text: clean, empfehlungen, model: data.model });
   } catch (e) {
     return json(502, { error: (e as Error)?.message || "Fehler beim KI-Aufruf." });
   }

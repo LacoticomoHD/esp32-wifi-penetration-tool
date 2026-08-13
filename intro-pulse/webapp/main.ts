@@ -10,11 +10,16 @@ import {
 import type { Activity, Kpis } from '../src/types';
 import { readAttachment, type DocAttachment } from './src/attachments';
 
+interface Empfehlung { titel: string; detail?: string; prio?: 'hoch' | 'mittel' | 'niedrig' }
+interface KiResult { text: string; empfehlungen?: Empfehlung[]; model?: string }
+
 let allActivities: Activity[] = [];
 let currentKpis: Kpis | null = null;
 let currentActs: Activity[] = [];
 let chatHistory: { role: string; content: string }[] = [];
 let kiAttachments: DocAttachment[] = [];
+let currentEmpfehlungen: Empfehlung[] = [];
+let currentChecklistScope = '';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const appEl = () => $('app');
@@ -285,11 +290,11 @@ function buildReport() {
 // Endpoint der KI-Analyse: gehostete Supabase-Funktion (zur Build-Zeit gesetzt)
 // oder – beim lokalen `npm run dev` – der eigene Server unter /api/analyze.
 const KI_ENDPOINT = (globalThis as { __PULSE_KI_ENDPOINT__?: string }).__PULSE_KI_ENDPOINT__ || '/api/analyze';
-async function callKI(payload: Record<string, unknown>): Promise<string> {
+async function callKI(payload: Record<string, unknown>): Promise<KiResult> {
   const res = await fetch(KI_ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) });
   const data = await res.json().catch(() => ({ error: 'Ungültige Antwort vom Server.' }));
   if (!res.ok || data.error) throw new Error(data.error || `Server-Fehler ${res.status}`);
-  return data.text as string;
+  return data as KiResult;
 }
 function md(t: string): string {
   const inline = (s: string) => s.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
@@ -304,6 +309,58 @@ function md(t: string): string {
   if (inList) html += '</ul>';
   return html;
 }
+
+// ---- KI-Handlungs-Checkliste -------------------------------------------------
+// Die Empfehlungen der Analyse werden zu abhakbaren To-dos. Der Haken-Zustand
+// bleibt im Browser (localStorage), getrennt je Kampagne + Akquisiteur-Filter,
+// und wird beim Drucken mit ins PDF übernommen.
+const CHECKS_KEY = 'pulse-checks';
+const normKey = (s: string) => s.trim().toLowerCase().slice(0, 120);
+function loadAllChecks(): Record<string, Record<string, boolean>> {
+  try { return JSON.parse(localStorage.getItem(CHECKS_KEY) || '{}'); } catch { return {}; }
+}
+function isChecked(scope: string, titel: string): boolean {
+  return !!loadAllChecks()[scope]?.[normKey(titel)];
+}
+function setChecked(scope: string, titel: string, val: boolean) {
+  const all = loadAllChecks();
+  if (!all[scope]) all[scope] = {};
+  if (val) all[scope][normKey(titel)] = true;
+  else delete all[scope][normKey(titel)];
+  localStorage.setItem(CHECKS_KEY, JSON.stringify(all));
+}
+function renderChecklist() {
+  const el = document.getElementById('ki-checklist');
+  if (!el) return;
+  if (!currentEmpfehlungen.length) { el.innerHTML = ''; return; }
+  const prioTxt: Record<string, string> = { hoch: 'Hoch', mittel: 'Mittel', niedrig: 'Niedrig' };
+  el.innerHTML =
+    `<div class="ki-cl-head">✅ Nächste Schritte<span class="ki-cl-hint">abhaken — der Stand bleibt im Browser gespeichert und kommt mit ins PDF</span></div>` +
+    currentEmpfehlungen
+      .map((e, i) => {
+        const p = e.prio && prioTxt[e.prio] ? e.prio : 'mittel';
+        const done = isChecked(currentChecklistScope, e.titel);
+        return (
+          `<label class="ki-cl-item${done ? ' done' : ''}">` +
+          `<input type="checkbox" data-i="${i}"${done ? ' checked' : ''} />` +
+          `<span class="ki-cl-body"><span class="ki-cl-title">${esc(e.titel)}</span>` +
+          (e.detail ? `<span class="ki-cl-detail">${esc(e.detail)}</span>` : '') +
+          `</span>` +
+          `<span class="ki-cl-prio p-${p}">${prioTxt[p]}</span>` +
+          `</label>`
+        );
+      })
+      .join('');
+  el.querySelectorAll<HTMLInputElement>('input[type=checkbox]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const e = currentEmpfehlungen[Number(cb.dataset.i)];
+      if (!e) return;
+      setChecked(currentChecklistScope, e.titel, cb.checked);
+      cb.closest('.ki-cl-item')?.classList.toggle('done', cb.checked);
+    });
+  });
+}
+
 async function runAnalysis() {
   if (!currentKpis) return;
   const out = document.getElementById('ki-out')!;
@@ -313,9 +370,19 @@ async function runAnalysis() {
   localStorage.setItem('ki-steck', steckbrief); localStorage.setItem('ki-model', model);
   btn.disabled = true;
   out.innerHTML = '<div class="ki-loading">Claude analysiert den Report …</div>';
-  try { out.innerHTML = md(await callKI({ mode: 'analyze', model, steckbrief, report: buildReport(), attachments: kiAttachments })); }
-  catch (e) { out.innerHTML = `<div class="err">${esc((e as Error).message)}</div>`; }
-  finally { btn.disabled = false; }
+  try {
+    const data = await callKI({ mode: 'analyze', model, steckbrief, report: buildReport(), attachments: kiAttachments });
+    out.innerHTML = md(data.text);
+    currentEmpfehlungen = Array.isArray(data.empfehlungen) ? data.empfehlungen : [];
+    currentChecklistScope = `${currentKpis!.campaign || 'Kampagne'}||${fAkq().value || 'alle'}`;
+    renderChecklist();
+  } catch (e) {
+    out.innerHTML = `<div class="err">${esc((e as Error).message)}</div>`;
+    currentEmpfehlungen = [];
+    renderChecklist();
+  } finally {
+    btn.disabled = false;
+  }
 }
 async function runChat() {
   if (!currentKpis) return;
@@ -331,7 +398,7 @@ async function runChat() {
   const aEl = log.lastElementChild as HTMLElement;
   log.scrollTop = log.scrollHeight;
   try {
-    const text = await callKI({ mode: 'chat', model, steckbrief, report: buildReport(), history: chatHistory, question: q, attachments: kiAttachments });
+    const { text } = await callKI({ mode: 'chat', model, steckbrief, report: buildReport(), history: chatHistory, question: q, attachments: kiAttachments });
     chatHistory.push({ role: 'user', content: q }, { role: 'assistant', content: text });
     if (chatHistory.length > 12) chatHistory = chatHistory.slice(-12);
     aEl.className = 'ki-a'; aEl.innerHTML = md(text);
