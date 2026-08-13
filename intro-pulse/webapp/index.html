@@ -55,6 +55,9 @@
   select.fsel{font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); background:var(--bg);
     border:1px solid var(--border); padding:7px 10px; cursor:pointer}
   .filterbar .reset{margin-left:auto; font-size:12px; color:var(--accent); cursor:pointer; text-decoration:none; font-weight:600}
+  .printbtn{font:inherit; font-size:12.5px; font-weight:700; color:#fff; background:var(--accent);
+    border:1px solid transparent; padding:7px 12px; cursor:pointer; margin-left:12px}
+  .printbtn:hover{filter:brightness(1.05)}
 
   main{padding:24px 0 8px}
   .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700}
@@ -100,7 +103,7 @@
   .srow{display:grid; grid-template-columns:150px 1fr 84px; align-items:center; gap:10px}
   .srow .sname{font-size:12.5px; color:var(--muted)}
   .srow .strack{height:18px; background:var(--track); overflow:hidden}
-  .srow .sfill{height:100%; width:var(--w); background:var(--bar); animation:grow .8s cubic-bezier(.2,.7,.2,1) both}
+  .sfill{display:block; height:100%; width:var(--w); background:var(--bar); animation:grow .8s cubic-bezier(.2,.7,.2,1) both}
   .srow.best .sfill{background:var(--accent)}
   .srow.best .sname{color:var(--ink); font-weight:600}
   .srow .sval{font-size:12.5px; font-weight:700; text-align:right}
@@ -192,6 +195,52 @@
   @media (max-width:720px){ .cols{grid-template-columns:1fr} .srow{grid-template-columns:120px 1fr 76px}
     .ki-controls{align-items:stretch} .ki-field{width:100%} .ki-btn{width:100%} }
   @media (prefers-reduced-motion: reduce){ .sfill{animation:none} .tile{transition:none} .ki-loading::after{animation:none} }
+
+  /* ---- Druck / PDF: die aktuelle (gefilterte) Ansicht als sauberes A4-Blatt ---- */
+  .printhead{display:none}
+  @media print{
+    /* Immer hell drucken — auch wenn der Bildschirm im Dunkelmodus läuft */
+    :root,
+    :root[data-theme="dark"],
+    :root:not([data-theme="light"]){
+      --bg:#FFFFFF; --card:#FFFFFF; --ink:#0E2038; --muted:#5C6B7E;
+      --border:#E4E8EE; --track:#EDF1F6; --bar:#2E4A6B;
+      --accent:#FF6F61; --accent-soft:#FFEDEA;
+      --navy:#0E2038; --on-navy:#EAF0F7; --on-navy-dim:#93A6BD;
+      --good:#1B9E6E; --good-soft:#E4F4EE; --warn:#C97E00; --warn-soft:#FBF0DC;
+      --shadow:none;
+    }
+    /* Farbflächen (Kacheln, Balken, Badges) im Druck erhalten */
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
+    @page{ size:A4; margin:12mm 11mm 14mm }
+    body{ background:#fff }
+    .wrap{ max-width:none; padding:0 }
+    /* Bedien-Elemente ausblenden — es soll ein Report werden, keine App */
+    .topbar .filesel, .filterbar, #f-print,
+    .ki-controls, .ki-docs-row, #ki-doclist, #ki-docerr, .ki-steck-wrap, .ki-chat,
+    .empty .filesel, #kisec .sec-head .m{ display:none !important }
+    /* Ohne gelaufene Analyse: KI-Abschnitt ganz weglassen */
+    body.print-no-ki #kisec{ display:none !important }
+    /* Topbar als schlanker Marken-Kopf */
+    .topbar .wrap{ padding:10px 0 }
+    .meta{ white-space:normal }
+    main{ padding:10px 0 0 }
+    /* Selbstbeschreibender Kopf des Blattes (Kampagne · Filter · Zeitraum · Datum) */
+    .printhead{ display:block; margin:12px 0 2px; padding-bottom:10px; border-bottom:2px solid var(--accent) }
+    .printhead h1{ margin:0; font-size:17px; letter-spacing:-.01em }
+    .printhead .ph-sub{ margin:5px 0 0; font-size:11.5px; color:var(--muted) }
+    /* Panels volle Breite → auf A4 besser lesbar */
+    .cols{ grid-template-columns:1fr }
+    /* Nichts über Seitenränder zerschneiden */
+    .card, .sec-head, .kpis, .drop, .crow, .srow, .ki-out h4{
+      page-break-inside:avoid; break-inside:avoid }
+    .sec-head{ page-break-after:avoid; break-after:avoid }
+    /* Ruhige Flächen: keine Schatten/Animationen/Hover */
+    .card{ box-shadow:none !important; border-color:#DCE2EA !important }
+    .tile:hover{ transform:none }
+    .sfill{ animation:none !important }
+    a[href]:after{ content:"" }
+  }
 </style>
 </head>
 <body>
@@ -220,10 +269,12 @@
       </select>
       <select id="f-erg" class="fsel"></select>
       <a id="f-reset" class="reset">zurücksetzen</a>
+      <button id="f-print" class="printbtn" type="button" title="Aktuelle Ansicht als PDF speichern oder drucken">📄 Als PDF speichern</button>
     </div>
   </div>
 
   <main class="wrap">
+    <div id="printhead" class="printhead"></div>
     <div id="app">
       <div class="empty">
         <div class="big">📈</div>

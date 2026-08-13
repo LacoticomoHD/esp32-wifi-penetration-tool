@@ -347,3 +347,43 @@ document.getElementById('ki-docs')?.addEventListener('change', (e) => {
   if (el.files && el.files.length) addDocs(el.files);
   el.value = '';
 });
+
+// ---- PDF / Druck ------------------------------------------------------------
+// Druckt die AKTUELL gefilterte Ansicht (Dashboard + ggf. KI-Analyse) als A4-PDF.
+// Das eigentliche Layout macht die Druck-CSS in index.html; hier nur Blatt-Kopf,
+// Dateiname und die Entscheidung, ob der KI-Abschnitt mitgedruckt wird.
+function fillPrintHead() {
+  const el = document.getElementById('printhead');
+  if (!el || !currentKpis) return;
+  const k = currentKpis;
+  const bits: string[] = [];
+  if (fAkq().value) bits.push(`Akquisiteur: ${fAkq().value}`);
+  if (fSekt().value) bits.push(`Sektor: ${fSekt().value}`);
+  if (fErg().value) bits.push(`Ergebnis: ${fErg().value}`);
+  const scope = bits.length ? bits.join(' · ') : 'Gesamte Kampagne';
+  const heute = new Date().toLocaleDateString('de-DE');
+  el.innerHTML =
+    `<h1>${esc(k.campaign || 'Kampagne')}</h1>` +
+    `<p class="ph-sub">${esc(scope)} · Zeitraum ${fmtDate(k.dateRange.from)}–${fmtDate(k.dateRange.to)} · ` +
+    `${k.totalCompanies} Firmen · ${k.wonCompanies} Termine · erstellt am ${heute}</p>`;
+}
+const BASE_TITLE = document.title; // statischer <title>, Ziel fürs Zurücksetzen
+let printTitleTimer: ReturnType<typeof setTimeout> | undefined;
+function printReport() {
+  if (!currentKpis) return;
+  fillPrintHead();
+  // KI-Abschnitt nur drucken, wenn wirklich eine Analyse gelaufen ist
+  // (der Platzhalter-Hinweis .ki-hint zählt nicht).
+  const kiOut = document.getElementById('ki-out');
+  const kiRun = !!kiOut && !kiOut.querySelector('.ki-hint') && (kiOut.textContent || '').trim().length > 0;
+  document.body.classList.toggle('print-no-ki', !kiRun);
+  // Sinnvoller Standard-Dateiname für „Als PDF speichern".
+  const who = fAkq().value ? ` — ${fAkq().value}` : '';
+  document.title = `INTRO Pulse — ${currentKpis.campaign || 'Kampagne'}${who}`;
+  const restore = () => { document.title = BASE_TITLE; };
+  if (printTitleTimer) clearTimeout(printTitleTimer);
+  window.addEventListener('afterprint', restore, { once: true });
+  printTitleTimer = setTimeout(restore, 3000); // Fallback, falls afterprint nicht feuert
+  window.print();
+}
+document.getElementById('f-print')?.addEventListener('click', printReport);
