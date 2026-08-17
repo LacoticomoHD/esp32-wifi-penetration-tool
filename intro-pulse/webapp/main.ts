@@ -4,10 +4,11 @@
 
 import {
   parseActivitiesFromBuffer,
+  readRowsFromBuffer,
   computeKpis,
   classifySektor,
 } from '../src/engine';
-import type { Activity, Kpis } from '../src/types';
+import type { Activity, CallerKpi, Kpis } from '../src/types';
 import { diffKpis, type KpiDelta } from '../src/compare';
 import { readAttachment, type DocAttachment } from './src/attachments';
 
@@ -99,6 +100,39 @@ function renderDashboard(k: Kpis, activityCount: number) {
     `<span class="cst">${flag ? `${c.attempts}× · ${c.reachedDM ? 'Entscheider erreicht' : 'nie beim Entscheider'}` : esc(c.stage)}</span>` +
     `<span class="cx">${c.attempts}×</span></div>`;
 
+  // Team-Vergleich je Akquisiteur. Nur sinnvoll, wenn mehrere Personen in der
+  // Ansicht sind — bei Filter auf eine Person bleibt genau ein Eintrag übrig,
+  // dann fällt der Abschnitt automatisch weg.
+  const akq = k.byAkquisiteur.filter((c) => c.name && c.name !== '—');
+  const avgTries = (c: CallerKpi) => c.activities / Math.max(1, c.companies);
+  let teamSection = '';
+  if (akq.length > 1) {
+    const bestQ = akq.reduce((a, b) => (b.terminQuote > a.terminQuote ? b : a), akq[0]);
+    const worstQ = akq.reduce((a, b) => (b.terminQuote < a.terminQuote ? b : a), akq[0]);
+    const bestE = akq.reduce((a, b) => (b.entscheiderQuote > a.entscheiderQuote ? b : a), akq[0]);
+    const qMax = Math.max(0.001, ...akq.map((c) => c.terminQuote));
+    const eMax = Math.max(0.001, ...akq.map((c) => c.entscheiderQuote));
+    const qRows = akq
+      .map((c) => bar(c.name, (c.terminQuote / qMax) * 100, `${pct(c.terminQuote)} <small>${c.won}/${c.companies}</small>`, c === bestQ && c.won > 0, 120))
+      .join('');
+    const eRows = akq
+      .map((c) => bar(c.name, (c.entscheiderQuote / eMax) * 100, `${pct(c.entscheiderQuote)} <small>${dec(avgTries(c))}×</small>`, c === bestE && c.reachedDM > 0, 120))
+      .join('');
+    const insightTeam =
+      bestQ.won > 0 && bestQ !== worstQ
+        ? `<b>${esc(bestQ.name)}</b> führt mit ${pct(bestQ.terminQuote)} (${bestQ.won} von ${bestQ.companies} Firmen), ${esc(worstQ.name)} liegt bei ${pct(worstQ.terminQuote)} — bei Ø ${dec(avgTries(bestQ))} statt ${dec(avgTries(worstQ))} Versuchen je Firma.`
+        : bestQ.won > 0
+          ? `Alle liegen bei ${pct(bestQ.terminQuote)} Termin-Quote.`
+          : `Noch kein Termin im Team — die Entscheider-Quote zeigt, wer am weitesten kommt.`;
+    teamSection = `
+    ${secHead('Team', 'Wer holt wie viele Termine?', `${akq.length} Akquisiteure · Filter oben grenzt auf eine Person ein`)}
+    <div class="cols even">
+      <div class="card panel"><h3>Termin‑Quote je Akquisiteur</h3><p class="cap">Firmen mit Termin, geteilt durch bearbeitete Firmen.</p><div class="seg">${qRows}</div><p class="insight">${insightTeam}</p></div>
+      <div class="card panel"><h3>Entscheider‑Quote</h3><p class="cap">Wie oft kommt jemand bis zum Entscheider? Rechts: Ø Versuche je Firma.</p><div class="seg">${eRows}</div></div>
+    </div>
+`;
+  }
+
   const icpZero = k.byIcp.find((s) => s.label === 'Kern-ICP');
   const insightSeg = icpZero && icpZero.won === 0 && icpZero.companies > 0
     ? `<b>Alle ${k.wonCompanies} Termine kommen aus „${bestSekt?.label}".</b> Im Kern‑ICP (5–100 MA, privat) steht bisher kein Termin.`
@@ -137,6 +171,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
       </div></div>
     </div>
 
+    ${teamSection}
     ${secHead('Zielsegment', 'Öffentlich vs. privat — woher kommen die Termine?')}
     <div class="cols">
       <div class="card panel"><h3>Termin‑Quote nach Sektor &amp; ICP</h3><p class="cap">Wer bringt tatsächlich Termine?</p><div class="seg">${segRows}</div><p class="insight">${insightSeg}</p></div>
@@ -294,10 +329,53 @@ async function loadCompareFile(file: File) {
 }
 function clearCompare() { manualPrev = null; updateComparison(); apply(); }
 
+// ---- Import-Diagnose --------------------------------------------------------
+// Häufigste Upload-Ursache für Fehler: die Spalten heißen im Export anders.
+// Statt einer technischen Meldung zeigen wir, welche Spalten die Datei
+// tatsächlich enthält und welche Pflichtspalten fehlen.
+const REQUIRED_COLS = ['Firma/Account', 'Ergebnis'];
+const normCol = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+/** Wahrscheinlichste Kopfzeile aus den ersten Zeilen der Datei. */
+function sniffColumns(buf: Uint8Array | null, filename: string): string[] {
+  if (!buf) return [];
+  try {
+    const rows = readRowsFromBuffer(buf, filename).slice(0, 12);
+    let best: string[] = [];
+    for (const r of rows) {
+      const cells = (r || []).map((c) => String(c ?? '').trim()).filter(Boolean);
+      if (cells.length > best.length) best = cells;
+    }
+    return best.slice(0, 24);
+  } catch {
+    return [];
+  }
+}
+
+function importErrorHtml(msg: string, cols: string[]): string {
+  const have = new Set(cols.map(normCol));
+  const missing = REQUIRED_COLS.filter((c) => !have.has(normCol(c)));
+  const chip = (t: string, cls = '') => `<span class="chip ${cls}">${esc(t)}</span>`;
+  const tip = missing.length
+    ? `<p>Benenne im Export ${missing.length > 1 ? 'die Spalten' : 'die Spalte'} <b>${missing.map(esc).join('</b> und <b>')}</b> entsprechend um — dann klappt der Upload.</p>`
+    : `<p>Die Pflichtspalten sind vorhanden. Prüfe, ob unterhalb der Kopfzeile auch Datenzeilen mit Firmennamen stehen.</p>`;
+  const found = cols.length
+    ? `<span class="lab">In deiner Datei gefunden</span><div class="chips">${cols.map((c) => chip(c)).join('')}</div>`
+    : `<span class="lab">Hinweis</span><p>Die Datei ließ sich nicht öffnen — ist es wirklich eine Excel- oder CSV-Datei?</p>`;
+  return (
+    `<div class="imperr"><h3>⚠️ Diese Datei konnte ich nicht auswerten</h3>` +
+    `<p class="why">${esc(msg)}</p>${tip}` +
+    `<span class="lab">Diese Spalten brauche ich</span><div class="chips">${REQUIRED_COLS.map((c) => chip(c, missing.includes(c) ? 'miss' : 'ok')).join('')}</div>` +
+    found +
+    `<p class="fine">Unterstützt: Excel (.xlsx/.xls) und CSV (Semikolon oder Komma). Die Kopfzeile darf irgendwo im Blatt stehen.</p></div>`
+  );
+}
+
 // ---- Datei-Upload -----------------------------------------------------------
 async function loadFile(file: File) {
+  let buf: Uint8Array | null = null;
   try {
-    const buf = new Uint8Array(await file.arrayBuffer());
+    buf = new Uint8Array(await file.arrayBuffer());
     allActivities = parseActivitiesFromBuffer(buf, file.name);
     if (allActivities.length === 0) throw new Error('Keine Aktivitäten in der Datei gefunden. Erwartet werden Spalten wie „Firma/Account", „Ergebnis" …');
     manualPrev = null; // neuer Report → zurück zum Auto-Vergleich (letzter Upload)
@@ -310,9 +388,12 @@ async function loadFile(file: File) {
     window.scrollTo({ top: 0 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    const html = importErrorHtml(msg, sniffColumns(buf, file.name));
     const err = document.getElementById('err');
-    if (err) err.innerHTML = `<div class="err">Fehler: ${esc(msg)}</div>`;
-    else appEl().innerHTML = `<div class="empty"><div class="big">⚠️</div><h2>Datei konnte nicht gelesen werden</h2><p>${esc(msg)}</p></div>`;
+    // Ist schon ein Report geladen, bleibt das Dashboard stehen — die Meldung
+    // erscheint darüber, statt die Auswertung zu verwerfen.
+    if (err) err.innerHTML = html;
+    else appEl().insertAdjacentHTML('afterbegin', html);
   }
 }
 
@@ -370,10 +451,45 @@ async function addDocs(files: FileList) {
 
 function buildReport() {
   const k = currentKpis!;
+  // Notizen inkl. Ansprechpartner, Position und Bearbeiter — eigene CRM-Daten,
+  // die der KI erlauben, Gesprächsverläufe Personen und Rollen zuzuordnen.
   const notizen = currentActs
     .filter((a) => a.kommentar && a.kommentar.trim().length > 3)
     .slice(0, 60)
-    .map((a) => ({ firma: a.firma, ergebnis: a.ergebnis, notiz: a.kommentar.slice(0, 280) }));
+    .map((a) => ({
+      firma: a.firma,
+      ergebnis: a.ergebnis,
+      kontakt: a.kontakt || undefined,
+      funktion: a.contactFunktion || undefined,
+      akquisiteur: a.zugeordnet || undefined,
+      notiz: a.kommentar.slice(0, 280),
+    }));
+  // Welche Positionen werden erreicht — und führen sie zum Termin?
+  // Zeigt z. B., ob man im Marketing landet statt bei der Geschäftsführung.
+  const posMap = new Map<string, { kontakte: number; termine: number }>();
+  for (const a of currentActs) {
+    const f = a.contactFunktion.trim();
+    if (!f) continue;
+    const e = posMap.get(f) || { kontakte: 0, termine: 0 };
+    e.kontakte++;
+    if (a.rank >= 4) e.termine++;
+    posMap.set(f, e);
+  }
+  const positionen = [...posMap.entries()]
+    .sort((x, y) => y[1].kontakte - x[1].kontakte)
+    .slice(0, 15)
+    .map(([funktion, v]) => ({ funktion, kontakte: v.kontakte, termine: v.termine }));
+  const akquisiteure = k.byAkquisiteur
+    .filter((c) => c.name && c.name !== '—')
+    .map((c) => ({
+      name: c.name,
+      firmen: c.companies,
+      termine: c.won,
+      terminQuoteProzent: +(c.terminQuote * 100).toFixed(1),
+      entscheiderQuoteProzent: +(c.entscheiderQuote * 100).toFixed(1),
+      aktivitaeten: c.activities,
+      avgVersucheJeFirma: +(c.activities / Math.max(1, c.companies)).toFixed(1),
+    }));
   return {
     kampagne: k.campaign,
     zeitraum: `${fmtDate(k.dateRange.from)}–${fmtDate(k.dateRange.to)}`,
@@ -387,6 +503,8 @@ function buildReport() {
     },
     funnel: k.funnel.filter((f) => f.rank > 0),
     sektor: k.bySektor, icp: k.byIcp, einwaende: k.byEinwand,
+    akquisiteure,
+    erreichtePositionen: positionen,
     meistBearbeitet: k.mostContacted, schwerZuKnacken: k.hardCases,
     gespraechsnotizen: notizen,
   };

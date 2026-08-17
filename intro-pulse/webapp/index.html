@@ -83,6 +83,20 @@
   .empty small{color:var(--muted); font-size:11.5px}
   .err{color:#fff; background:#D64B45; padding:12px 16px; margin-top:12px; font-size:13px}
 
+  /* Import-Fehler: zeigt fehlende und gefundene Spalten statt Technik-Text */
+  .imperr{text-align:left; background:var(--card); border:1px solid color-mix(in srgb,#D64B45 45%,transparent);
+    padding:16px 18px 14px; margin:12px 0; box-shadow:var(--shadow)}
+  .imperr h3{margin:0 0 6px; font-size:14px; font-weight:700; color:#D64B45}
+  .imperr p{margin:0 0 10px; font-size:13px; color:var(--ink); max-width:none}
+  .imperr p.why{color:var(--muted); font-size:12.5px}
+  .imperr p.fine{margin:12px 0 0; font-size:11.5px; color:var(--muted)}
+  .imperr .lab{display:block; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--muted); font-weight:700; margin:12px 0 7px}
+  .imperr .chips{display:flex; flex-wrap:wrap; gap:6px}
+  .imperr .chip{font-size:11.5px; padding:3px 9px; border:1px solid var(--border); background:var(--bg); color:var(--ink)}
+  .imperr .chip.miss{color:#fff; background:#D64B45; border-color:transparent; font-weight:700}
+  .imperr .chip.ok{color:var(--good); background:var(--good-soft); border-color:color-mix(in srgb,var(--good) 28%,transparent)}
+
   .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr)); gap:14px}
   .tile{position:relative; padding:18px 18px 16px; overflow:hidden; transition:transform .15s ease}
   .tile:hover{transform:translateY(-2px)}
@@ -104,6 +118,7 @@
   .cap{font-size:12px; color:var(--muted); margin:0}
 
   .cols{display:grid; grid-template-columns:1.7fr 1fr; gap:14px}
+  .cols.even{grid-template-columns:1fr 1fr} /* zwei gleich breite Panels — für Balken-Vergleiche */
   .panel{padding:18px 20px 20px}
   .panel h3{margin:0 0 2px; font-size:14px; font-weight:700}
   .panel .cap{margin:0 0 16px}
