@@ -7,6 +7,7 @@ import {
   readRowsFromBuffer,
   computeKpis,
   classifySektor,
+  classifyAbteilung,
 } from '../src/engine';
 import type { Activity, CallerKpi, Kpis } from '../src/types';
 import { diffKpis, type KpiDelta } from '../src/compare';
@@ -134,30 +135,65 @@ function renderDashboard(k: Kpis, activityCount: number) {
   }
 
   // Mit welcher Abteilung entstehen Termine? (aus „Contact Funktion" zugeordnet)
-  const abt = k.byAbteilung.filter((a) => a.label !== 'ohne Angabe');
+  // Wichtig: Der Abschnitt wird IMMER gezeigt, sobald Aktivitäten da sind —
+  // fehlt die Position im Export, sagen wir das, statt still zu verschwinden.
+  const abtAlle = k.byAbteilung;
+  const abtBekannt = abtAlle.filter((a) => a.label !== 'ohne Angabe');
+  const abtMitTermin = abtBekannt.filter((a) => a.termine > 0);
+  // Konkret: wer hat zugesagt? (Firma · Person · Funktion → Abteilung)
+  const abtRang = new Map(abtAlle.map((a, i) => [a.label, i] as [string, number]));
+  const termineDetail = currentActs
+    .filter((a) => a.rank >= 4)
+    .map((a) => ({
+      firma: a.firma,
+      person: a.kontakt || '—',
+      funktion: a.contactFunktion || '',
+      abteilung: classifyAbteilung(a.contactFunktion),
+    }))
+    .sort((x, y) =>
+      (abtRang.get(x.abteilung) ?? 99) - (abtRang.get(y.abteilung) ?? 99) ||
+      x.firma.localeCompare(y.firma, 'de'));
+  const ohneFunktion = termineDetail.filter((t) => !t.funktion).length;
   let abtSection = '';
-  if (abt.length) {
-    const withT = abt.filter((a) => a.termine > 0);
-    const tMax = Math.max(1, ...abt.map((a) => a.termine));
-    const gMax = Math.max(1, ...abt.map((a) => a.gespraeche));
-    const tRows = withT
+  if (abtAlle.length) {
+    const tMax = Math.max(1, ...abtBekannt.map((a) => a.termine));
+    const gMax = Math.max(1, ...abtAlle.map((a) => a.gespraeche));
+    const tRows = abtMitTermin
       .map((a, i) => bar(a.label, (a.termine / tMax) * 100, `${a.termine} <small>${pct(a.quote)}</small>`, i === 0, 165))
       .join('');
-    const gRows = abt
+    const gRows = [...abtAlle]
+      .sort((x, y) => y.gespraeche - x.gespraeche)
       .slice(0, 8)
       .map((a) => bar(a.label, (a.gespraeche / gMax) * 100, `${a.gespraeche} <small>${a.termine ? `${a.termine} Term.` : '—'}</small>`, false, 165))
       .join('');
-    const ohneTermin = abt.filter((a) => a.termine === 0).sort((x, y) => y.gespraeche - x.gespraeche)[0];
-    const insightAbt = withT.length
-      ? `<b>${esc(withT[0].label)}</b> bringt die meisten Termine: ${withT[0].termine} aus ${withT[0].gespraeche} Gesprächen (${pct(withT[0].quote)}).` +
-        (ohneTermin && ohneTermin.gespraeche > 1
-          ? ` Mit <b>${esc(ohneTermin.label)}</b> gab es ${ohneTermin.gespraeche} Gespräche — aber keinen Termin.`
-          : '')
-      : `Noch kein Termin — die meisten Gespräche liefen über ${esc(abt[0].label)} (${abt[0].gespraeche}).`;
+    // Liste der Zusagen — beantwortet „wer genau hat zugesagt, aus welcher Abteilung?"
+    const detailRows = termineDetail
+      .slice(0, 12)
+      .map((t) =>
+        `<div class="trow"><span class="tn">${esc(t.firma)}</span>` +
+        `<span class="tp">${esc(t.person)}${t.funktion ? ` · ${esc(t.funktion)}` : ' · Position nicht hinterlegt'}</span>` +
+        `<span class="ta${t.funktion ? '' : ' none'}">${esc(t.abteilung === 'ohne Angabe' ? '—' : t.abteilung)}</span></div>`)
+      .join('');
+    const mehr = termineDetail.length > 12 ? `<p class="cap" style="margin-top:8px">… und ${termineDetail.length - 12} weitere Termine.</p>` : '';
+    const ohneHinweis = ohneFunktion
+      ? `<p class="cap" style="margin-top:10px">Bei ${ohneFunktion} von ${termineDetail.length} Terminen ist keine Position hinterlegt — im Export fehlt dort die Spalte „Contact Funktion".</p>`
+      : '';
+    const linkeSeite = abtMitTermin.length
+      ? `<div class="seg">${tRows}</div><p class="insight">${
+          `<b>${esc(abtMitTermin[0].label)}</b> bringt die meisten Termine: ${abtMitTermin[0].termine} aus ${abtMitTermin[0].gespraeche} Gesprächen (${pct(abtMitTermin[0].quote)}).` +
+          (() => {
+            const ohneT = abtBekannt.filter((a) => a.termine === 0).sort((x, y) => y.gespraeche - x.gespraeche)[0];
+            return ohneT && ohneT.gespraeche > 1 ? ` Mit <b>${esc(ohneT.label)}</b> gab es ${ohneT.gespraeche} Gespräche — aber keinen Termin.` : '';
+          })()
+        }</p>`
+      : termineDetail.length
+        ? `<p class="cap">Es gibt ${termineDetail.length} Termin(e), aber im Export ist keine Position dazu hinterlegt. Fülle die Spalte „Contact Funktion", dann siehst du hier die Abteilungen.</p>`
+        : `<p class="cap">Noch keine Termine — sobald einer zustande kommt, steht hier die Abteilung des Ansprechpartners.</p>`;
     abtSection = `
     ${secHead('Ansprechpartner', 'Mit welcher Abteilung entstehen Termine?', 'Position automatisch zugeordnet')}
     <div class="cols even">
-      <div class="card panel"><h3>Termine nach Abteilung</h3><p class="cap">Wem der Ersttermin zugesagt wurde. Rechts: Trefferquote je Gespräch.</p><div class="seg">${tRows || '<p class="cap">Noch keine Termine.</p>'}</div><p class="insight">${insightAbt}</p></div>
+      <div class="card panel"><h3>Termine nach Abteilung</h3><p class="cap">Wem der Ersttermin zugesagt wurde. Rechts: Trefferquote je Gespräch.</p>${linkeSeite}
+        ${termineDetail.length ? `<h3 style="margin-top:18px">Wer hat zugesagt?</h3><p class="cap">Absteigend nach Abteilung.</p><div class="tlist">${detailRows}</div>${mehr}${ohneHinweis}` : ''}</div>
       <div class="card panel"><h3>Gespräche nach Abteilung</h3><p class="cap">Wohin der Aufwand geht — und was dabei herauskommt.</p><div class="seg">${gRows}</div></div>
     </div>
 `;

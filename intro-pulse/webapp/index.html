@@ -151,10 +151,24 @@
   .clist{display:flex; flex-direction:column}
   .crow{display:grid; grid-template-columns:1fr auto; align-items:center; gap:2px 12px; padding:9px 0; border-bottom:1px solid var(--border)}
   .crow:last-child{border-bottom:0}
-  .crow .cn{font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-  .crow .cst{grid-column:1; font-size:11.5px; color:var(--muted)}
-  .crow .cx{grid-row:1 / span 2; font-size:15px; font-weight:750; text-align:right; letter-spacing:-.02em}
+  /* Explizite Platzierung: ohne sie zieht das zeilenuebergreifende Element
+     (grid-row) die erste Spalte an sich und der Name rutscht nach rechts. */
+  .crow .cn{grid-column:1; grid-row:1; font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .crow .cst{grid-column:1; grid-row:2; font-size:11.5px; color:var(--muted)}
+  .crow .cx{grid-column:2; grid-row:1 / span 2; justify-self:end; font-size:15px; font-weight:750; text-align:right; letter-spacing:-.02em}
   .crow.flag .cx{color:var(--warn)}
+
+  /* Liste der Zusagen: welche Person aus welcher Abteilung hat zugesagt? */
+  .tlist{display:flex; flex-direction:column; margin-top:4px}
+  .tlist .trow{display:grid; grid-template-columns:1fr auto; align-items:center; gap:2px 12px;
+    padding:9px 0; border-bottom:1px solid var(--border)}
+  .tlist .trow:last-child{border-bottom:0}
+  .tlist .tn{grid-column:1; grid-row:1; font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tlist .tp{grid-column:1; grid-row:2; font-size:11.5px; color:var(--muted)}
+  .tlist .ta{grid-column:2; grid-row:1 / span 2; justify-self:end; align-self:center; font-size:10.5px; font-weight:700; letter-spacing:.02em;
+    padding:3px 9px; white-space:nowrap; color:var(--good); background:var(--good-soft);
+    border:1px solid color-mix(in srgb,var(--good) 25%,transparent)}
+  .tlist .ta.none{color:var(--muted); background:var(--track); border-color:var(--border)}
 
   .ai{padding:20px}
   .ai .aihead{display:flex; align-items:center; gap:10px; margin-bottom:4px}
@@ -281,7 +295,7 @@
     /* Panels volle Breite → auf A4 besser lesbar */
     .cols{ grid-template-columns:1fr }
     /* Nichts über Seitenränder zerschneiden */
-    .card, .sec-head, .kpis, .drop, .crow, .srow, .ki-out h4, .ki-cl-item{
+    .card, .sec-head, .kpis, .drop, .crow, .srow, .ki-out h4, .ki-cl-item, .tlist .trow{
       page-break-inside:avoid; break-inside:avoid }
     .sec-head{ page-break-after:avoid; break-after:avoid }
     /* Ruhige Flächen: keine Schatten/Animationen/Hover */
