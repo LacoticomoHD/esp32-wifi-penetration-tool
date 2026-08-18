@@ -31,6 +31,10 @@ const logo = readFileSync(join(here, 'logo.b64'), 'utf8').trim();
 
 let html = readFileSync(join(here, 'index.html'), 'utf8');
 html = html.replace('__LOGO_B64__', () => logo);
+// Sichtbarer Versionsstempel: so ist auf einen Blick erkennbar, ob der Browser
+// die aktuelle Fassung geladen hat oder eine zwischengespeicherte alte.
+const buildStamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+html = html.replace('__BUILD__', () => buildStamp);
 html = html.replace(
   '<!--BUNDLE-->',
   () => `<script>window.__PULSE_KI_ENDPOINT__=${JSON.stringify(KI_ENDPOINT)}</script>\n<script>${js}</script>`,
