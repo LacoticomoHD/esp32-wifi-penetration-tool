@@ -118,7 +118,11 @@
   .cap{font-size:12px; color:var(--muted); margin:0}
 
   .cols{display:grid; grid-template-columns:1.7fr 1fr; gap:14px}
-  .cols.even{grid-template-columns:1fr 1fr} /* zwei gleich breite Panels — für Balken-Vergleiche */
+  /* Zwei gleich breite Panels für Balken-Vergleiche — nur am Bildschirm und
+     nur ab Tablet-Breite. `screen` schließt den Druck aus, `min-width` den
+     Handy-Fall: sonst schlägt .cols.even (höhere Spezifität) die
+     Einspalten-Regeln in den Media-Queries und die Seite scrollt seitlich. */
+  @media screen and (min-width:721px){ .cols.even{grid-template-columns:1fr 1fr} }
   .panel{padding:18px 20px 20px}
   .panel h3{margin:0 0 2px; font-size:14px; font-weight:700}
   .panel .cap{margin:0 0 16px}
