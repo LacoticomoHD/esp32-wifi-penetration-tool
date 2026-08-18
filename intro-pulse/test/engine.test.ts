@@ -10,6 +10,7 @@ import {
   parseGermanNumber,
   parseDate,
   aggregateCompanies,
+  classifyAbteilung,
 } from '../src/engine';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -78,6 +79,28 @@ const einw = Object.fromEntries(k.byEinwand.map((e) => [e.label, e.companies]));
 check('Einwand: Beta = nie erreicht', einw['nie erreicht'] === 1, JSON.stringify(k.byEinwand));
 check('Einwand: Gamma = grundsätzlich kein Interesse', einw['grundsätzlich kein Interesse'] === 1);
 check('Einwand: Alpha = Termin vereinbart', einw['Termin vereinbart'] === 1);
+
+console.log('\nAbteilungs-Zuordnung (Contact Funktion → Abteilung)');
+const abt = (s: string) => classifyAbteilung(s);
+check('"Leiter IT" → IT & EDV', abt('Leiter IT') === 'IT & EDV', abt('Leiter IT'));
+check('"IT-Leitung" → IT & EDV', abt('IT-Leitung') === 'IT & EDV', abt('IT-Leitung'));
+check('"EDV" → IT & EDV', abt('EDV') === 'IT & EDV', abt('EDV'));
+check('"Qualitätsleiter" → Qualität (nicht IT)', abt('Qualitätsleiter') === 'Qualität', abt('Qualitätsleiter'));
+check('"Geschäftsführer" → Geschäftsführung', abt('Geschäftsführer') === 'Geschäftsführung', abt('Geschäftsführer'));
+check('"GF" (Abkürzung) → Geschäftsführung', abt('GF') === 'Geschäftsführung', abt('GF'));
+check('"Technischer Einkäufer" → Einkauf (vor Technik)', abt('Technischer Einkäufer') === 'Einkauf', abt('Technischer Einkäufer'));
+check('"Produktionsleiter" → Produktion & Fertigung', abt('Produktionsleiter') === 'Produktion & Fertigung', abt('Produktionsleiter'));
+check('"Leiter Instandhaltung" → Technik & Entwicklung', abt('Leiter Instandhaltung') === 'Technik & Entwicklung', abt('Leiter Instandhaltung'));
+check('"Marketing" → Vertrieb & Marketing', abt('Marketing') === 'Vertrieb & Marketing', abt('Marketing'));
+check('"Zentrale" → Assistenz & Empfang', abt('Zentrale') === 'Assistenz & Empfang', abt('Zentrale'));
+check('leer → ohne Angabe', abt('') === 'ohne Angabe', abt(''));
+check('"Leitung" (generisch) → Sonstige', abt('Leitung') === 'Sonstige', abt('Leitung'));
+
+console.log('\nTermine je Abteilung (Fixture)');
+const byAbt = Object.fromEntries(k.byAbteilung.map((a) => [a.label, a]));
+check('Alpha-Termin zählt auf Geschäftsführung? (Fixture: Leitung)', k.byAbteilung.reduce((n, a) => n + a.termine, 0) === k.wonCompanies, JSON.stringify(k.byAbteilung));
+check('Gespräche insgesamt = Aktivitäten', k.byAbteilung.reduce((n, a) => n + a.gespraeche, 0) === k.totalActivities, JSON.stringify(k.byAbteilung));
+check('Quote = termine/gespraeche', k.byAbteilung.every((a) => approx(a.quote, a.gespraeche ? a.termine / a.gespraeche : 0)), JSON.stringify(byAbt));
 
 console.log('\nUpload-Pfad (Puffer statt Datei)');
 const kBuf = analyzeBuffer(readFileSync(fixture), 'fixture.csv');

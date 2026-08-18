@@ -8,6 +8,7 @@ import * as XLSXImport from 'xlsx';
 const XLSX = ((XLSXImport as unknown as { default?: typeof XLSXImport }).default ??
   XLSXImport) as typeof XLSXImport;
 import type {
+  AbteilungKpi,
   Activity,
   CallerKpi,
   Company,
@@ -269,6 +270,59 @@ export function classifySektor(name: string): 'öffentlich' | 'privat' | 'unklar
   if (PUBLIC_WORDS.some((w) => n.includes(w)) || PUBLIC_RE.test(n)) return 'öffentlich';
   if (FORM_RE.test(n)) return 'privat';
   return 'unklar';
+}
+
+// Freitext aus „Contact Funktion" → Abteilung. CRM-Einträge sind uneinheitlich
+// („Leiter IT", „IT-Leitung", „EDV" meinen dasselbe), deshalb Stichwort-Erkennung
+// statt fester Liste. Reihenfolge = Priorität: Spezifisches vor Allgemeinem
+// (z. B. „Technischer Einkäufer" → Einkauf, nicht Technik).
+const ABTEILUNGEN: { label: string; re: RegExp }[] = [
+  { label: 'Geschäftsführung', re: /gesch(ä|ae)ftsf(ü|ue)hr|gesch(ä|ae)ftsleit|\bgf\b|\bgschf\b|inhaber|eigent(ü|ue)mer|gesellschafter|vorstand|\bceo\b|\bcoo\b|managing director|prokurist/ },
+  { label: 'Einkauf', re: /einkauf|eink(ä|ae)ufer|beschaffung|purchas|procurement|materialwirtschaft/ },
+  { label: 'IT & EDV', re: /\bit\b|\bit[-\/ ]|\bedv\b|informatik|digitalisierung|\bcio\b|\bciso\b|systemadmin|netzwerk|software/ },
+  { label: 'Produktion & Fertigung', re: /produktion|fertigung|werkleit|betriebsleit|montage|schichtleit|\bmeister\b/ },
+  { label: 'Technik & Entwicklung', re: /technisch|\btechnik\b|instandhalt|wartung|engineering|konstruktion|entwicklung|\bcto\b/ },
+  { label: 'Logistik & Lager', re: /logistik|\blager\b|versand|supply chain|spedition|disposition/ },
+  { label: 'Qualität', re: /qualit(ä|ae)t|\bqm\b|\bqs\b|quality/ },
+  { label: 'Finanzen & Controlling', re: /finanz|buchhalt|controlling|\bcfo\b|kaufm(ä|ae)nn|rechnungswesen/ },
+  { label: 'Personal (HR)', re: /personal|\bhr\b|human resources|recruit|ausbildung/ },
+  { label: 'Vertrieb & Marketing', re: /vertrieb|verkauf|\bsales\b|marketing|account manage|kundenbetreuung/ },
+  { label: 'Assistenz & Empfang', re: /assist|sekret(ä|ae)r|empfang|zentrale|office manage|back ?office/ },
+];
+
+/** Grobe Abteilung zu einer Positionsbezeichnung. Leer → „ohne Angabe". */
+export function classifyAbteilung(funktion: string): string {
+  const f = (funktion || '').toLowerCase().trim();
+  if (!f) return 'ohne Angabe';
+  for (const a of ABTEILUNGEN) if (a.re.test(f)) return a.label;
+  return 'Sonstige';
+}
+
+/**
+ * Mit welcher Abteilung entstehen Termine?
+ * `gespraeche` zählt Aktivitäten, `termine` zählt Firmen — der Termin wird der
+ * Abteilung des Ansprechpartners zugeordnet, mit dem er zustande kam.
+ */
+function groupAbteilungen(activities: Activity[], won: Company[]): AbteilungKpi[] {
+  const map = new Map<string, { gespraeche: number; termine: number }>();
+  const bump = (label: string, key: 'gespraeche' | 'termine') => {
+    const e = map.get(label) || { gespraeche: 0, termine: 0 };
+    e[key]++;
+    map.set(label, e);
+  };
+  for (const a of activities) bump(classifyAbteilung(a.contactFunktion), 'gespraeche');
+  for (const c of won) {
+    const winAct = c.activities.find((a) => a.rank >= 4);
+    if (winAct) bump(classifyAbteilung(winAct.contactFunktion), 'termine');
+  }
+  return [...map.entries()]
+    .map(([label, v]) => ({
+      label,
+      gespraeche: v.gespraeche,
+      termine: v.termine,
+      quote: v.gespraeche ? v.termine / v.gespraeche : 0,
+    }))
+    .sort((a, b) => b.termine - a.termine || b.gespraeche - a.gespraeche);
 }
 
 function classifyIcp(
@@ -542,6 +596,7 @@ export function computeKpis(
     bySektor: segment(companies, sektorBand, SEKTOR_ORDER),
     byIcp: segment(companies, icpBand, ICP_ORDER),
     byEinwand,
+    byAbteilung: groupAbteilungen(activities, won),
     goal,
     timeline,
     dateRange: { from: dates[0] ?? null, to: dates[dates.length - 1] ?? null },

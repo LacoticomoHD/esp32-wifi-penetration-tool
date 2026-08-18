@@ -133,6 +133,36 @@ function renderDashboard(k: Kpis, activityCount: number) {
 `;
   }
 
+  // Mit welcher Abteilung entstehen Termine? (aus „Contact Funktion" zugeordnet)
+  const abt = k.byAbteilung.filter((a) => a.label !== 'ohne Angabe');
+  let abtSection = '';
+  if (abt.length) {
+    const withT = abt.filter((a) => a.termine > 0);
+    const tMax = Math.max(1, ...abt.map((a) => a.termine));
+    const gMax = Math.max(1, ...abt.map((a) => a.gespraeche));
+    const tRows = withT
+      .map((a, i) => bar(a.label, (a.termine / tMax) * 100, `${a.termine} <small>${pct(a.quote)}</small>`, i === 0, 165))
+      .join('');
+    const gRows = abt
+      .slice(0, 8)
+      .map((a) => bar(a.label, (a.gespraeche / gMax) * 100, `${a.gespraeche} <small>${a.termine ? `${a.termine} Term.` : '—'}</small>`, false, 165))
+      .join('');
+    const ohneTermin = abt.filter((a) => a.termine === 0).sort((x, y) => y.gespraeche - x.gespraeche)[0];
+    const insightAbt = withT.length
+      ? `<b>${esc(withT[0].label)}</b> bringt die meisten Termine: ${withT[0].termine} aus ${withT[0].gespraeche} Gesprächen (${pct(withT[0].quote)}).` +
+        (ohneTermin && ohneTermin.gespraeche > 1
+          ? ` Mit <b>${esc(ohneTermin.label)}</b> gab es ${ohneTermin.gespraeche} Gespräche — aber keinen Termin.`
+          : '')
+      : `Noch kein Termin — die meisten Gespräche liefen über ${esc(abt[0].label)} (${abt[0].gespraeche}).`;
+    abtSection = `
+    ${secHead('Ansprechpartner', 'Mit welcher Abteilung entstehen Termine?', 'Position automatisch zugeordnet')}
+    <div class="cols even">
+      <div class="card panel"><h3>Termine nach Abteilung</h3><p class="cap">Wem der Ersttermin zugesagt wurde. Rechts: Trefferquote je Gespräch.</p><div class="seg">${tRows || '<p class="cap">Noch keine Termine.</p>'}</div><p class="insight">${insightAbt}</p></div>
+      <div class="card panel"><h3>Gespräche nach Abteilung</h3><p class="cap">Wohin der Aufwand geht — und was dabei herauskommt.</p><div class="seg">${gRows}</div></div>
+    </div>
+`;
+  }
+
   const icpZero = k.byIcp.find((s) => s.label === 'Kern-ICP');
   const insightSeg = icpZero && icpZero.won === 0 && icpZero.companies > 0
     ? `<b>Alle ${k.wonCompanies} Termine kommen aus „${bestSekt?.label}".</b> Im Kern‑ICP (5–100 MA, privat) steht bisher kein Termin.`
@@ -182,6 +212,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
       </div>
     </div>
 
+    ${abtSection}
     ${secHead('Einwände', 'Warum (noch) kein Termin?', 'heuristisch')}
     <div class="card panel"><div class="seg">${einwRows}</div></div>
 
@@ -329,6 +360,48 @@ async function loadCompareFile(file: File) {
 }
 function clearCompare() { manualPrev = null; updateComparison(); apply(); }
 
+// ---- KI-Kontext je Kampagne -------------------------------------------------
+// Beim Wechsel auf einen anderen Report MUSS der KI-Kontext weg: sonst stehen
+// Analyse, Checkliste, Chat und Anhänge der vorherigen Kampagne unter den neuen
+// Zahlen — und landen so auch im PDF. Der Steckbrief wird dagegen je Kampagne
+// aufgehoben und beim Wiederöffnen automatisch zurückgeholt.
+const STECK_KEY = 'pulse-steckbriefe';
+const KI_HINT =
+  '<p class="ki-hint">Klick auf „Analyse starten" — Claude bewertet Termin‑Quote, Funnel und Einwände und gibt priorisierte Empfehlungen. Anschließend kannst du unten Rückfragen stellen.</p>';
+function loadSteckbriefe(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(STECK_KEY) || '{}'); } catch { return {}; }
+}
+function saveSteckbrief(campaign: string, text: string) {
+  const all = loadSteckbriefe();
+  if (text.trim()) all[campaign] = text;
+  else delete all[campaign];
+  try { localStorage.setItem(STECK_KEY, JSON.stringify(all)); } catch { /* Speicher voll/gesperrt */ }
+}
+function resetKiContext(campaign: string) {
+  chatHistory = [];
+  kiAttachments = [];
+  currentEmpfehlungen = [];
+  renderDocs();
+  renderChecklist();
+  const out = document.getElementById('ki-out');
+  if (out) out.innerHTML = KI_HINT;
+  const log = document.getElementById('ki-log');
+  if (log) log.innerHTML = '';
+  const docerr = document.getElementById('ki-docerr');
+  if (docerr) docerr.textContent = '';
+  const steck = document.getElementById('ki-steck') as HTMLTextAreaElement | null;
+  if (!steck) return;
+  const all = loadSteckbriefe();
+  // Einmalige Übernahme des alten, kampagnenlosen Steckbriefs auf die aktuelle
+  // Kampagne — danach ist der Alt-Schlüssel weg und kann nicht mehr überlaufen.
+  const legacy = localStorage.getItem('ki-steck');
+  if (legacy && !all[campaign]) {
+    all[campaign] = legacy;
+    try { localStorage.setItem(STECK_KEY, JSON.stringify(all)); localStorage.removeItem('ki-steck'); } catch { /* egal */ }
+  }
+  steck.value = all[campaign] || '';
+}
+
 // ---- Import-Diagnose --------------------------------------------------------
 // Häufigste Upload-Ursache für Fehler: die Spalten heißen im Export anders.
 // Statt einer technischen Meldung zeigen wir, welche Spalten die Datei
@@ -380,6 +453,7 @@ async function loadFile(file: File) {
     if (allActivities.length === 0) throw new Error('Keine Aktivitäten in der Datei gefunden. Erwartet werden Spalten wie „Firma/Account", „Ergebnis" …');
     manualPrev = null; // neuer Report → zurück zum Auto-Vergleich (letzter Upload)
     lastFullKpis = computeKpis(allActivities, { goalPerMonth: 3 });
+    resetKiContext(lastFullKpis.campaign || ''); // KI-Kontext der Vorkampagne verwerfen
     prepareComparison();
     updateComparison();
     populateFilters();
@@ -415,9 +489,9 @@ $('f-reset').addEventListener('click', (e) => { e.preventDefault(); fAkq().value
 function showKI() {
   const sec = document.getElementById('kisec');
   if (sec) sec.style.display = '';
-  const steck = document.getElementById('ki-steck') as HTMLTextAreaElement | null;
+  // Der Steckbrief wird NICHT hier gesetzt — das macht resetKiContext() beim
+  // Dateiwechsel, kampagnengenau. Sonst würde ein Filterwechsel ihn überschreiben.
   const model = document.getElementById('ki-model') as HTMLSelectElement | null;
-  if (steck && !steck.value) steck.value = localStorage.getItem('ki-steck') || '';
   if (model && localStorage.getItem('ki-model')) model.value = localStorage.getItem('ki-model')!;
 }
 function hideKI() { const sec = document.getElementById('kisec'); if (sec) sec.style.display = 'none'; }
@@ -504,7 +578,8 @@ function buildReport() {
     funnel: k.funnel.filter((f) => f.rank > 0),
     sektor: k.bySektor, icp: k.byIcp, einwaende: k.byEinwand,
     akquisiteure,
-    erreichtePositionen: positionen,
+    abteilungen: k.byAbteilung, // gruppiert: wo entstehen Termine?
+    erreichtePositionen: positionen, // Rohbezeichnungen aus dem CRM
     meistBearbeitet: k.mostContacted, schwerZuKnacken: k.hardCases,
     gespraechsnotizen: notizen,
   };
@@ -589,7 +664,8 @@ async function runAnalysis() {
   const btn = document.getElementById('ki-run') as HTMLButtonElement;
   const model = (document.getElementById('ki-model') as HTMLSelectElement).value;
   const steckbrief = (document.getElementById('ki-steck') as HTMLTextAreaElement).value;
-  localStorage.setItem('ki-steck', steckbrief); localStorage.setItem('ki-model', model);
+  saveSteckbrief(currentKpis!.campaign || '', steckbrief);
+  localStorage.setItem('ki-model', model);
   btn.disabled = true;
   out.innerHTML = '<div class="ki-loading">Claude analysiert den Report …</div>';
   try {
@@ -676,3 +752,7 @@ function printReport() {
   window.print();
 }
 document.getElementById('f-print')?.addEventListener('click', printReport);
+// Steckbrief auch ohne Analyse sichern — je Kampagne.
+document.getElementById('ki-steck')?.addEventListener('blur', (e) => {
+  if (currentKpis) saveSteckbrief(currentKpis.campaign || '', (e.target as HTMLTextAreaElement).value);
+});

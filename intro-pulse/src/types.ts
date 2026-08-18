@@ -69,6 +69,14 @@ export interface SegmentKpi {
   terminQuote: number;
 }
 
+/** Mit welcher Abteilung wurde gesprochen — und wo entstanden Termine? */
+export interface AbteilungKpi {
+  label: string;
+  gespraeche: number; // Aktivitäten mit Ansprechpartnern dieser Abteilung
+  termine: number; // Firmen, deren Ersttermin mit dieser Abteilung zustande kam
+  quote: number; // termine / gespraeche
+}
+
 /** Firma verdichtet auf Bearbeitungs-Intensität. */
 export interface CompanyContact {
   name: string;
@@ -101,6 +109,7 @@ export interface Kpis {
   bySektor: SegmentKpi[]; // öffentlich vs. privat
   byIcp: SegmentKpi[]; // Kern-ICP vs. außerhalb
   byEinwand: { label: string; companies: number }[]; // warum (noch) kein Termin
+  byAbteilung: AbteilungKpi[]; // mit welcher Abteilung entstehen Termine?
   goal: { perMonth: number; months: number; wonPerMonth: number; attainment: number };
   timeline: { date: string; activities: number }[];
   dateRange: { from: Date | null; to: Date | null };
