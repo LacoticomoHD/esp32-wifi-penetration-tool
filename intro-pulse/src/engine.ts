@@ -268,7 +268,10 @@ const PUBLIC_WORDS = [
   'handelskammer', 'volkshochschule', 'wirtschaftsförderung', 'hochschule',
   'universität', 'ministerium', 'landesbetrieb',
 ];
-const PUBLIC_RE = /\b(ihk|hwk|vhs|wfg)\b/;
+// Bewusst mit Wortgrenzen bzw. Zeilenanfang: "Stadt Musterhausen" ist öffentlich,
+// "Stadtbäckerei GmbH" oder "Gesamtbau GmbH" dagegen nicht.
+const PUBLIC_RE =
+  /\b(ihk|hwk|vhs|wfg)\b|^stadt\s|^markt\s|\bstadtwerke\b|\bamt\b|(bezirks|landrats|ordnungs|bau|jugend|schul|gesundheits|umwelt|kultur|sozial|standes|gewerbe|liegenschafts)amt\b|zweckverband|verbandsgemeinde|samtgemeinde|kreisverwaltung|bezirksregierung|regierungspr(ä|ae)sidium|eigenbetrieb|anstalt des öffentlichen/;
 const FORM_RE = /\b(gmbh|ag|kg|mbh|ug|gbr|ohg|se|kgaa)\b|e\.?\s?k\.?/;
 const COMPETITOR_RE =
   /(agentur|werbe|webdesign|web-design|onlinemarketing|online-marketing|seo-)/;

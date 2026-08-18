@@ -11,6 +11,7 @@ import {
   parseDate,
   aggregateCompanies,
   classifyAbteilung,
+  classifySektor,
 } from '../src/engine';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -79,6 +80,18 @@ const einw = Object.fromEntries(k.byEinwand.map((e) => [e.label, e.companies]));
 check('Einwand: Beta = nie erreicht', einw['nie erreicht'] === 1, JSON.stringify(k.byEinwand));
 check('Einwand: Gamma = grundsätzlich kein Interesse', einw['grundsätzlich kein Interesse'] === 1);
 check('Einwand: Alpha = Termin vereinbart', einw['Termin vereinbart'] === 1);
+
+console.log('\nSektor-Erkennung (nur relevant, wo Behörden angerufen werden)');
+const sek = (n: string) => classifySektor(n);
+check('"Stadt Musterhausen" → öffentlich', sek('Stadt Musterhausen') === 'öffentlich', sek('Stadt Musterhausen'));
+check('"Stadtwerke Musterstadt" → öffentlich', sek('Stadtwerke Musterstadt') === 'öffentlich', sek('Stadtwerke Musterstadt'));
+check('"Bezirksamt Nord" → öffentlich', sek('Bezirksamt Nord') === 'öffentlich', sek('Bezirksamt Nord'));
+check('"Markt Schwaben" → öffentlich', sek('Markt Schwaben') === 'öffentlich', sek('Markt Schwaben'));
+check('"Zweckverband Wasser" → öffentlich', sek('Zweckverband Wasser') === 'öffentlich', sek('Zweckverband Wasser'));
+check('"Gesamtbau GmbH" → privat (kein Amt-Treffer)', sek('Gesamtbau GmbH') === 'privat', sek('Gesamtbau GmbH'));
+check('"Stadtbäckerei Müller GmbH" → privat', sek('Stadtbäckerei Müller GmbH') === 'privat', sek('Stadtbäckerei Müller GmbH'));
+check('"Baumarkt Schmidt GmbH" → privat', sek('Baumarkt Schmidt GmbH') === 'privat', sek('Baumarkt Schmidt GmbH'));
+check('"Hauptstadt Immobilien AG" → privat', sek('Hauptstadt Immobilien AG') === 'privat', sek('Hauptstadt Immobilien AG'));
 
 console.log('\nAbteilungs-Zuordnung (Contact Funktion → Abteilung)');
 const abt = (s: string) => classifyAbteilung(s);
