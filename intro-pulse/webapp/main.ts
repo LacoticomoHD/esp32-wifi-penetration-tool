@@ -72,16 +72,6 @@ function renderDashboard(k: Kpis, activityCount: number) {
     )
     .join('');
 
-  // Bewusst ohne öffentlich/privat: Bis auf eine Kampagne werden ausschließlich
-  // Firmen angerufen, dort war die Aufteilung ohne Aussage.
-  const segMax = Math.max(0.001, ...k.byIcp.map((s) => s.terminQuote));
-  const bestIcp = k.byIcp.reduce((a, b) => (b.terminQuote > a.terminQuote ? b : a), k.byIcp[0]);
-  const segRows = k.byIcp
-    .map((s) =>
-      bar(s.label, (s.terminQuote / segMax) * 100, `${pct(s.terminQuote)} <small>${s.won}/${s.companies}</small>`, s === bestIcp && s.won > 0),
-    )
-    .join('');
-
   const einw = k.byEinwand.filter((e) => e.label !== 'Termin vereinbart');
   const einwMax = Math.max(1, ...einw.map((e) => e.companies));
   const einwRows = einw
@@ -191,12 +181,6 @@ function renderDashboard(k: Kpis, activityCount: number) {
 `;
   }
 
-  const icpZero = k.byIcp.find((s) => s.label === 'Kern-ICP');
-  const insightSeg =
-    icpZero && icpZero.won === 0 && icpZero.companies > 0
-      ? `Im Kern‑ICP (5–100 MA) steht bisher kein Termin — alle ${k.wonCompanies} Termine kommen von außerhalb des Kernsegments.`
-      : `Beste Termin‑Quote: <b>${bestIcp?.label}</b>.`;
-
   const compareMeta = filtersActive()
     ? 'gefiltert · Vergleich gilt für die Gesamtkampagne'
     : comparePrevLabel === 'erster Stand'
@@ -231,14 +215,12 @@ function renderDashboard(k: Kpis, activityCount: number) {
     </div>
 
     ${teamSection}
-    ${secHead('Zielsegment', 'Woher kommen die Termine?')}
-    <div class="cols">
-      <div class="card panel"><h3>Termin‑Quote nach Zielsegment</h3><p class="cap">Wer bringt tatsächlich Termine?</p><div class="seg">${segRows}</div><p class="insight">${insightSeg}</p></div>
-      <div class="card panel"><h3>Zielerreichung</h3><p class="cap">Ziel: ${k.goal.perMonth} Termine pro Monat.</p>
-        <div style="font-size:40px;font-weight:750;letter-spacing:-.03em;color:var(--accent);line-height:1;margin-top:2px">${pct(k.goal.attainment)}</div>
-        <div style="font-size:12.5px;color:var(--muted);margin-top:6px">${dec(k.goal.wonPerMonth)} von ${k.goal.perMonth} Terminen/Monat · ${k.wonCompanies} Termine in ${dec(k.goal.months)} Monaten</div>
-        <div class="strack" style="height:16px;margin-top:14px;overflow:hidden"><span class="sfill" style="--w:${Math.min(100, k.goal.attainment * 100).toFixed(0)}%;background:var(--accent)"></span></div>
-      </div>
+    ${secHead('Ziel', 'Werden die Zielvorgaben erreicht?')}
+    <div class="card panel">
+      <h3>Zielerreichung</h3><p class="cap">Ziel: ${k.goal.perMonth} Termine pro Monat.</p>
+      <div style="font-size:40px;font-weight:750;letter-spacing:-.03em;color:var(--accent);line-height:1;margin-top:2px">${pct(k.goal.attainment)}</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-top:6px">${dec(k.goal.wonPerMonth)} von ${k.goal.perMonth} Terminen/Monat · ${k.wonCompanies} Termine in ${dec(k.goal.months)} Monaten</div>
+      <div class="strack" style="height:16px;margin-top:14px;overflow:hidden"><span class="sfill" style="--w:${Math.min(100, k.goal.attainment * 100).toFixed(0)}%;background:var(--accent)"></span></div>
     </div>
 
     ${abtSection}
@@ -603,7 +585,7 @@ function buildReport() {
       zielProMonat: k.goal.perMonth, zielerreichungProzent: +(k.goal.attainment * 100).toFixed(0),
     },
     funnel: k.funnel.filter((f) => f.rank > 0),
-    icp: k.byIcp, einwaende: k.byEinwand,
+    einwaende: k.byEinwand,
     akquisiteure,
     abteilungen: k.byAbteilung, // gruppiert: wo entstehen Termine?
     erreichtePositionen: positionen, // Rohbezeichnungen aus dem CRM
