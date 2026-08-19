@@ -31,6 +31,12 @@ function systemPrompt(steckbrief?: string): string {
   ].join("\n");
 }
 function analyzeUser(report: unknown): string {
+  // Sind bereits Termine zustande gekommen, waere "Warum keine Termine?" falsch
+  // gestellt — dann geht es um die Firmen, bei denen es noch hakt.
+  // deno-lint-ignore no-explicit-any
+  const termine = Number((report as any)?.kennzahlen?.termine ?? 0);
+  const abschnittHemmnisse =
+    termine > 0 ? "## Woran es bei den übrigen Firmen hakt" : "## Warum (noch) keine Termine";
   return [
     "Hier sind die aggregierten Kennzahlen und Gesprächsnotizen einer Kampagne als JSON:",
     "```json",
@@ -39,7 +45,7 @@ function analyzeUser(report: unknown): string {
     "",
     "Erstelle eine Auswertung mit GENAU diesen Abschnitten (jeweils 2–4 Sätze, immer mit konkreten Zahlen):",
     "## Was lief gut",
-    "## Warum (noch) keine Termine",
+    abschnittHemmnisse,
     "## Früh-Abriss & schwer zu knackende Firmen",
     "Nutze den Projekt-Steckbrief für die Deutung (Zielsegment/ICP, Einwände, Angebot, Kampagnenziel).",
     "",

@@ -6,7 +6,6 @@ import {
   parseActivitiesFromBuffer,
   readRowsFromBuffer,
   computeKpis,
-  classifySektor,
   classifyAbteilung,
 } from '../src/engine';
 import type { Activity, CallerKpi, Kpis } from '../src/types';
@@ -34,7 +33,6 @@ const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const appEl = () => $('app');
 const filterbar = () => $('filterbar');
 const fAkq = () => $('f-akq') as HTMLSelectElement;
-const fSekt = () => $('f-sekt') as HTMLSelectElement;
 const fErg = () => $('f-erg') as HTMLSelectElement;
 
 // ---- Formatierung -----------------------------------------------------------
@@ -74,28 +72,15 @@ function renderDashboard(k: Kpis, activityCount: number) {
     )
     .join('');
 
-  // Öffentlich/privat ist nur dort aussagekräftig, wo tatsächlich Behörden oder
-  // Gemeinden angerufen werden. In reinen Firmen-Kampagnen stünde sonst nur
-  // "privat: 100 %" — deshalb blenden wir die Sektor-Zeilen dann aus.
-  const oeffentlich = k.bySektor.find((s) => s.label === 'öffentlich');
-  const sektRelevant = !!oeffentlich && oeffentlich.companies > 0;
-  const segQuellen = sektRelevant ? [...k.bySektor, ...k.byIcp] : k.byIcp;
-  const segMax = Math.max(0.001, ...segQuellen.map((s) => s.terminQuote));
-  const bestSekt = k.bySektor.reduce((a, b) => (b.terminQuote > a.terminQuote ? b : a), k.bySektor[0]);
+  // Bewusst ohne öffentlich/privat: Bis auf eine Kampagne werden ausschließlich
+  // Firmen angerufen, dort war die Aufteilung ohne Aussage.
+  const segMax = Math.max(0.001, ...k.byIcp.map((s) => s.terminQuote));
   const bestIcp = k.byIcp.reduce((a, b) => (b.terminQuote > a.terminQuote ? b : a), k.byIcp[0]);
-  const segRows =
-    (sektRelevant
-      ? k.bySektor
-          .map((s) =>
-            bar(s.label, (s.terminQuote / segMax) * 100, `${pct(s.terminQuote)} <small>${s.won}/${s.companies}</small>`, s === bestSekt && s.won > 0),
-          )
-          .join('')
-      : '') +
-    k.byIcp
-      .map((s) =>
-        bar(s.label, (s.terminQuote / segMax) * 100, `${pct(s.terminQuote)} <small>${s.won}/${s.companies}</small>`, s === bestIcp && s.won > 0),
-      )
-      .join('');
+  const segRows = k.byIcp
+    .map((s) =>
+      bar(s.label, (s.terminQuote / segMax) * 100, `${pct(s.terminQuote)} <small>${s.won}/${s.companies}</small>`, s === bestIcp && s.won > 0),
+    )
+    .join('');
 
   const einw = k.byEinwand.filter((e) => e.label !== 'Termin vereinbart');
   const einwMax = Math.max(1, ...einw.map((e) => e.companies));
@@ -207,11 +192,8 @@ function renderDashboard(k: Kpis, activityCount: number) {
   }
 
   const icpZero = k.byIcp.find((s) => s.label === 'Kern-ICP');
-  const insightSeg = sektRelevant
-    ? icpZero && icpZero.won === 0 && icpZero.companies > 0
-      ? `<b>Alle ${k.wonCompanies} Termine kommen aus „${bestSekt?.label}".</b> Im Kern‑ICP (5–100 MA, privat) steht bisher kein Termin.`
-      : `Beste Termin‑Quote: <b>${bestSekt?.label}</b>.`
-    : icpZero && icpZero.won === 0 && icpZero.companies > 0
+  const insightSeg =
+    icpZero && icpZero.won === 0 && icpZero.companies > 0
       ? `Im Kern‑ICP (5–100 MA) steht bisher kein Termin — alle ${k.wonCompanies} Termine kommen von außerhalb des Kernsegments.`
       : `Beste Termin‑Quote: <b>${bestIcp?.label}</b>.`;
 
@@ -249,9 +231,9 @@ function renderDashboard(k: Kpis, activityCount: number) {
     </div>
 
     ${teamSection}
-    ${secHead('Zielsegment', sektRelevant ? 'Öffentlich vs. privat — woher kommen die Termine?' : 'Woher kommen die Termine?')}
+    ${secHead('Zielsegment', 'Woher kommen die Termine?')}
     <div class="cols">
-      <div class="card panel"><h3>Termin‑Quote nach ${sektRelevant ? 'Sektor &amp; ICP' : 'Zielsegment'}</h3><p class="cap">Wer bringt tatsächlich Termine?</p><div class="seg">${segRows}</div><p class="insight">${insightSeg}</p></div>
+      <div class="card panel"><h3>Termin‑Quote nach Zielsegment</h3><p class="cap">Wer bringt tatsächlich Termine?</p><div class="seg">${segRows}</div><p class="insight">${insightSeg}</p></div>
       <div class="card panel"><h3>Zielerreichung</h3><p class="cap">Ziel: ${k.goal.perMonth} Termine pro Monat.</p>
         <div style="font-size:40px;font-weight:750;letter-spacing:-.03em;color:var(--accent);line-height:1;margin-top:2px">${pct(k.goal.attainment)}</div>
         <div style="font-size:12.5px;color:var(--muted);margin-top:6px">${dec(k.goal.wonPerMonth)} von ${k.goal.perMonth} Terminen/Monat · ${k.wonCompanies} Termine in ${dec(k.goal.months)} Monaten</div>
@@ -260,7 +242,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
     </div>
 
     ${abtSection}
-    ${secHead('Einwände', 'Warum (noch) kein Termin?', 'heuristisch')}
+    ${secHead('Einwände', k.wonCompanies > 0 ? 'Woran hakt es bei den übrigen Firmen?' : 'Warum (noch) kein Termin?', 'heuristisch')}
     <div class="card panel"><div class="seg">${einwRows}</div></div>
 
     ${secHead('Bearbeitung', 'Wer wurde wie oft angegangen?')}
@@ -310,16 +292,10 @@ function populateFilters() {
   fErg().innerHTML =
     `<option value="">Ergebnis: alle</option>` +
     distinct(allActivities.map((a) => a.ergebnis)).map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
-  // Sektor-Filter nur einblenden, wenn überhaupt öffentliche Stellen dabei sind.
-  const hatOeffentlich = [...new Set(allActivities.map((a) => a.firma))]
-    .some((f) => classifySektor(f) === 'öffentlich');
-  fSekt().style.display = hatOeffentlich ? '' : 'none';
-  fSekt().value = '';
 }
 function apply() {
   let acts = allActivities;
   if (fAkq().value) acts = acts.filter((a) => a.zugeordnet === fAkq().value);
-  if (fSekt().value) acts = acts.filter((a) => classifySektor(a.firma) === fSekt().value);
   if (fErg().value) acts = acts.filter((a) => a.ergebnis === fErg().value);
   if (acts.length === 0) {
     hideKI();
@@ -384,7 +360,7 @@ function updateComparison() {
   }
 }
 // Δ-Anzeige für eine Kennzahl (nur im ungefilterten Blick sichtbar).
-const filtersActive = () => !!(fAkq().value || fSekt().value || fErg().value);
+const filtersActive = () => !!(fAkq().value || fErg().value);
 function deltaBadge(key: string): string {
   if (filtersActive()) return '';
   const d = snapshotDeltas.find((x) => x.key === key);
@@ -533,8 +509,8 @@ document.getElementById('f-cmp')?.addEventListener('change', (e) => {
   if (el.files && el.files[0]) loadCompareFile(el.files[0]);
   el.value = '';
 });
-[fAkq(), fSekt(), fErg()].forEach((s) => s.addEventListener('change', apply));
-$('f-reset').addEventListener('click', (e) => { e.preventDefault(); fAkq().value = ''; fSekt().value = ''; fErg().value = ''; apply(); });
+[fAkq(), fErg()].forEach((s) => s.addEventListener('change', apply));
+$('f-reset').addEventListener('click', (e) => { e.preventDefault(); fAkq().value = ''; fErg().value = ''; apply(); });
 
 // ---- KI-Sektion (serverseitiger Claude-Aufruf) ------------------------------
 function showKI() {
@@ -627,7 +603,6 @@ function buildReport() {
       zielProMonat: k.goal.perMonth, zielerreichungProzent: +(k.goal.attainment * 100).toFixed(0),
     },
     funnel: k.funnel.filter((f) => f.rank > 0),
-    ...(k.bySektor.some((s) => s.label === 'öffentlich' && s.companies > 0) ? { sektor: k.bySektor } : {}),
     icp: k.byIcp, einwaende: k.byEinwand,
     akquisiteure,
     abteilungen: k.byAbteilung, // gruppiert: wo entstehen Termine?
@@ -775,7 +750,6 @@ function fillPrintHead() {
   const k = currentKpis;
   const bits: string[] = [];
   if (fAkq().value) bits.push(`Akquisiteur: ${fAkq().value}`);
-  if (fSekt().value) bits.push(`Sektor: ${fSekt().value}`);
   if (fErg().value) bits.push(`Ergebnis: ${fErg().value}`);
   const scope = bits.length ? bits.join(' · ') : 'Gesamte Kampagne';
   const heute = new Date().toLocaleDateString('de-DE');
