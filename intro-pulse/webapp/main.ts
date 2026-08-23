@@ -217,7 +217,8 @@ function renderDashboard(k: Kpis, activityCount: number) {
     ${teamSection}
     ${secHead('Ziel', 'Werden die Zielvorgaben erreicht?')}
     <div class="card panel">
-      <h3>Zielerreichung</h3><p class="cap">Ziel: ${k.goal.perMonth} Termine pro Monat.</p>
+      <h3>Zielerreichung</h3>
+      <p class="cap">Ziel: <input id="goal-in" class="goalin" type="number" min="1" max="999" step="1" value="${k.goal.perMonth}" aria-label="Termine pro Monat" /><span class="goalprint">${k.goal.perMonth}</span> Termine pro Monat <span class="goalhint">— je Kampagne gespeichert</span></p>
       <div style="font-size:40px;font-weight:750;letter-spacing:-.03em;color:var(--accent);line-height:1;margin-top:2px">${pct(k.goal.attainment)}</div>
       <div style="font-size:12.5px;color:var(--muted);margin-top:6px">${dec(k.goal.wonPerMonth)} von ${k.goal.perMonth} Terminen/Monat · ${k.wonCompanies} Termine in ${dec(k.goal.months)} Monaten</div>
       <div class="strack" style="height:16px;margin-top:14px;overflow:hidden"><span class="sfill" style="--w:${Math.min(100, k.goal.attainment * 100).toFixed(0)}%;background:var(--accent)"></span></div>
@@ -237,6 +238,15 @@ function renderDashboard(k: Kpis, activityCount: number) {
 
   drawTimeline(k.timeline);
   document.getElementById('cmp-clear')?.addEventListener('click', (e) => { e.preventDefault(); clearCompare(); });
+  const goalIn = document.getElementById('goal-in') as HTMLInputElement | null;
+  goalIn?.addEventListener('change', () => {
+    const n = Math.round(Number(goalIn.value));
+    goalPerMonth = Number.isFinite(n) && n > 0 ? Math.min(n, 999) : GOAL_DEFAULT;
+    saveGoal(currentKpis?.campaign || '', goalPerMonth);
+    // Kennzahlen mit dem neuen Ziel neu rechnen — auch die Vergleichsbasis.
+    if (allActivities.length) lastFullKpis = computeKpis(allActivities, { goalPerMonth });
+    apply();
+  });
 }
 
 function drawTimeline(timeline: { date: string; activities: number }[]) {
@@ -285,7 +295,7 @@ function apply() {
     return;
   }
   currentActs = acts;
-  currentKpis = computeKpis(acts, { goalPerMonth: 3 });
+  currentKpis = computeKpis(acts, { goalPerMonth });
   renderDashboard(currentKpis, acts.length);
   showKI();
 }
@@ -359,7 +369,7 @@ async function loadCompareFile(file: File) {
     const buf = new Uint8Array(await file.arrayBuffer());
     const acts = parseActivitiesFromBuffer(buf, file.name);
     if (acts.length === 0) throw new Error('Keine Aktivitäten in der Vergleichsdatei gefunden.');
-    manualPrev = { kpis: computeKpis(acts, { goalPerMonth: 3 }), label: `Datei „${file.name}"` };
+    manualPrev = { kpis: computeKpis(acts, { goalPerMonth }), label: `Datei „${file.name}"` };
     updateComparison();
     apply();
   } catch (e) {
@@ -374,6 +384,19 @@ function clearCompare() { manualPrev = null; updateComparison(); apply(); }
 // Analyse, Checkliste, Chat und Anhänge der vorherigen Kampagne unter den neuen
 // Zahlen — und landen so auch im PDF. Der Steckbrief wird dagegen je Kampagne
 // aufgehoben und beim Wiederöffnen automatisch zurückgeholt.
+const GOAL_KEY = 'pulse-ziele';
+const GOAL_DEFAULT = 3;
+let goalPerMonth = GOAL_DEFAULT; // Terminziel der aktuellen Kampagne
+function loadGoals(): Record<string, number> {
+  try { return JSON.parse(localStorage.getItem(GOAL_KEY) || '{}'); } catch { return {}; }
+}
+function saveGoal(campaign: string, n: number) {
+  const all = loadGoals();
+  if (n > 0 && n !== GOAL_DEFAULT) all[campaign] = n;
+  else delete all[campaign];
+  try { localStorage.setItem(GOAL_KEY, JSON.stringify(all)); } catch { /* Speicher gesperrt */ }
+}
+
 const STECK_KEY = 'pulse-steckbriefe';
 const KI_HINT =
   '<p class="ki-hint">Klick auf „Analyse starten" — Claude bewertet Termin‑Quote, Funnel und Einwände und gibt priorisierte Empfehlungen. Anschließend kannst du unten Rückfragen stellen.</p>';
@@ -461,7 +484,10 @@ async function loadFile(file: File) {
     allActivities = parseActivitiesFromBuffer(buf, file.name);
     if (allActivities.length === 0) throw new Error('Keine Aktivitäten in der Datei gefunden. Erwartet werden Spalten wie „Firma/Account", „Ergebnis" …');
     manualPrev = null; // neuer Report → zurück zum Auto-Vergleich (letzter Upload)
-    lastFullKpis = computeKpis(allActivities, { goalPerMonth: 3 });
+    // Terminziel dieser Kampagne laden (Vorgabe 3/Monat), bevor gerechnet wird.
+    const kampagne = allActivities.find((a) => a.kampagne)?.kampagne || '';
+    goalPerMonth = loadGoals()[kampagne] ?? GOAL_DEFAULT;
+    lastFullKpis = computeKpis(allActivities, { goalPerMonth });
     resetKiContext(lastFullKpis.campaign || ''); // KI-Kontext der Vorkampagne verwerfen
     prepareComparison();
     updateComparison();
