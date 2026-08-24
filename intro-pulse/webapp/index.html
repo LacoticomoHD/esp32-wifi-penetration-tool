@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>INTRO Pulse</title>
+<style>
+  :root{
+    --bg:#F4F6F9; --card:#FFFFFF; --ink:#0E2038; --muted:#5C6B7E;
+    --border:#E4E8EE; --track:#EDF1F6; --bar:#2E4A6B;
+    --accent:#FF6F61; --accent-soft:#FFEDEA;
+    --navy:#0E2038; --on-navy:#EAF0F7; --on-navy-dim:#93A6BD;
+    --good:#1B9E6E; --good-soft:#E4F4EE; --warn:#C97E00; --warn-soft:#FBF0DC;
+    --shadow:0 1px 2px rgba(14,32,56,.06), 0 8px 24px rgba(14,32,56,.06);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0A1523; --card:#12233A; --ink:#EAF0F7; --muted:#93A6BD;
+      --border:#243B57; --track:#1A2E48; --bar:#4A6E9B; --accent:#FF7A6D;
+      --accent-soft:#3A2320; --navy:#081121; --on-navy:#EAF0F7; --on-navy-dim:#7E93AD;
+      --good:#3CC48C; --good-soft:#123528; --warn:#E0A63A; --warn-soft:#3A2E14;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A1523; --card:#12233A; --ink:#EAF0F7; --muted:#93A6BD;
+    --border:#243B57; --track:#1A2E48; --bar:#4A6E9B; --accent:#FF7A6D;
+    --accent-soft:#3A2320; --navy:#081121; --on-navy:#EAF0F7; --on-navy-dim:#7E93AD;
+    --good:#3CC48C; --good-soft:#123528; --warn:#E0A63A; --warn-soft:#3A2E14;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-variant-numeric:tabular-nums; line-height:1.5; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1120px; margin:0 auto; padding:0 22px}
+
+  .topbar{background:var(--navy); color:var(--on-navy)}
+  .topbar .wrap{display:flex; align-items:center; gap:16px; padding:15px 22px; flex-wrap:wrap}
+  .brand{display:flex; align-items:center; gap:14px; min-width:0}
+  .brand img.logo{height:26px; width:auto; display:block}
+  .brand .divider{width:1px; height:24px; background:rgba(255,255,255,.18)}
+  .brand .app{display:flex; flex-direction:column; line-height:1.15}
+  .brand .app b{font-size:16px; letter-spacing:.14em; font-weight:700}
+  .brand .app span{font-size:11px; color:var(--on-navy-dim); letter-spacing:.05em}
+  .topbar .spacer{flex:1}
+  .filesel{display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:13px; font-weight:600;
+    background:var(--accent); color:#fff; padding:8px 14px; border:1px solid transparent}
+  .filesel:hover{filter:brightness(1.05)}
+  .meta{font-size:12px; color:var(--on-navy-dim); white-space:nowrap}
+
+  .filterbar{background:var(--card); border-bottom:1px solid var(--border)}
+  .filterbar .wrap{display:flex; align-items:center; gap:9px; padding:10px 22px; flex-wrap:wrap}
+  .flabel{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-right:2px}
+  select.fsel{font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); background:var(--bg);
+    border:1px solid var(--border); padding:7px 10px; cursor:pointer}
+  .filterbar .reset{margin-left:auto; font-size:12px; color:var(--accent); cursor:pointer; text-decoration:none; font-weight:600}
+  .printbtn{font:inherit; font-size:12.5px; font-weight:700; color:#fff; background:var(--accent);
+    border:1px solid transparent; padding:7px 12px; cursor:pointer; margin-left:12px}
+  .printbtn:hover{filter:brightness(1.05)}
+  .cmpbtn{display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-size:12.5px; font-weight:700;
+    color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:7px 12px; margin-left:10px}
+  .cmpbtn:hover{border-color:var(--accent)}
+  .cmp-clear{color:var(--accent); cursor:pointer; font-weight:600; text-decoration:none}
+  /* Terminziel je Kampagne — im Druck als reine Zahl statt als Eingabefeld */
+  .goalin{width:62px; font:inherit; font-size:13px; font-weight:700; color:var(--ink); background:var(--bg);
+    border:1px solid var(--border); padding:3px 6px; text-align:center}
+  .goalin:focus{outline:none; border-color:var(--accent)}
+  .goalin:hover{border-color:var(--accent)}
+  .goalprint{display:none; font-weight:700; color:var(--ink)}
+  .goalhint{font-size:11.5px; color:var(--muted)}
+  .dlt{display:inline-block; margin-left:3px; font-size:10.5px; font-weight:700; padding:1px 6px;
+    border:1px solid transparent; letter-spacing:.02em; white-space:nowrap}
+  .dlt.up{color:var(--good); background:var(--good-soft); border-color:color-mix(in srgb,var(--good) 28%,transparent)}
+  .dlt.down{color:#fff; background:#D64B45}
+
+  main{padding:24px 0 8px}
+  .eyebrow{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .sec-head{display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin:26px 0 12px}
+  .sec-head h2{margin:0; font-size:15px; font-weight:700; letter-spacing:-.01em}
+  .sec-head .m{font-size:12px; color:var(--muted)}
+  .card{background:var(--card); border:1px solid var(--border); box-shadow:var(--shadow)}
+
+  .empty{display:flex; flex-direction:column; align-items:center; text-align:center; gap:14px;
+    padding:64px 22px; border:1px dashed var(--border); background:var(--card); margin-top:8px}
+  .empty h2{margin:0; font-size:20px; letter-spacing:-.01em}
+  .empty p{margin:0; color:var(--muted); max-width:46ch; font-size:13.5px}
+  .empty .big{font-size:34px}
+  .empty .filesel{font-size:14px; padding:11px 18px}
+  .empty small{color:var(--muted); font-size:11.5px}
+  .err{color:#fff; background:#D64B45; padding:12px 16px; margin-top:12px; font-size:13px}
+
+  /* Import-Fehler: zeigt fehlende und gefundene Spalten statt Technik-Text */
+  .imperr{text-align:left; background:var(--card); border:1px solid color-mix(in srgb,#D64B45 45%,transparent);
+    padding:16px 18px 14px; margin:12px 0; box-shadow:var(--shadow)}
+  .imperr h3{margin:0 0 6px; font-size:14px; font-weight:700; color:#D64B45}
+  .imperr p{margin:0 0 10px; font-size:13px; color:var(--ink); max-width:none}
+  .imperr p.why{color:var(--muted); font-size:12.5px}
+  .imperr p.fine{margin:12px 0 0; font-size:11.5px; color:var(--muted)}
+  .imperr .lab{display:block; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--muted); font-weight:700; margin:12px 0 7px}
+  .imperr .chips{display:flex; flex-wrap:wrap; gap:6px}
+  .imperr .chip{font-size:11.5px; padding:3px 9px; border:1px solid var(--border); background:var(--bg); color:var(--ink)}
+  .imperr .chip.miss{color:#fff; background:#D64B45; border-color:transparent; font-weight:700}
+  .imperr .chip.ok{color:var(--good); background:var(--good-soft); border-color:color-mix(in srgb,var(--good) 28%,transparent)}
+
+  .kpis{display:grid; grid-template-columns:repeat(auto-fit,minmax(196px,1fr)); gap:14px}
+  .tile{position:relative; padding:18px 18px 16px; overflow:hidden; transition:transform .15s ease}
+  .tile:hover{transform:translateY(-2px)}
+  .tile .lab{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .tile .num{font-size:38px; font-weight:750; letter-spacing:-.03em; margin:8px 0 2px; line-height:1}
+  .tile .sub{font-size:12.5px; color:var(--muted)}
+  .tile.hero::before{content:""; position:absolute; inset:0 0 auto 0; height:3px; background:var(--accent)}
+  .tile.hero .num{color:var(--accent)}
+  .pill{display:inline-block; margin-top:12px; font-size:11px; font-weight:700; letter-spacing:.03em; padding:3px 9px; border:1px solid transparent}
+  .pill.good{color:var(--good); background:var(--good-soft); border-color:color-mix(in srgb,var(--good) 25%,transparent)}
+  .pill.warn{color:var(--warn); background:var(--warn-soft); border-color:color-mix(in srgb,var(--warn) 25%,transparent)}
+  .pill.key{color:var(--accent); background:var(--accent-soft); border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+  .pill.flat{color:var(--muted); background:var(--track); border-color:var(--border)}
+
+  .chart-wrap{padding:18px 20px 16px}
+  .chart-wrap h3{margin:0 0 2px; font-size:14px; font-weight:700}
+  .chart svg{width:100%; height:auto; display:block}
+  .chart .axis{display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px}
+  .cap{font-size:12px; color:var(--muted); margin:0}
+
+  .cols{display:grid; grid-template-columns:1.7fr 1fr; gap:14px}
+  /* Zwei gleich breite Panels für Balken-Vergleiche — nur am Bildschirm und
+     nur ab Tablet-Breite. `screen` schließt den Druck aus, `min-width` den
+     Handy-Fall: sonst schlägt .cols.even (höhere Spezifität) die
+     Einspalten-Regeln in den Media-Queries und die Seite scrollt seitlich. */
+  @media screen and (min-width:721px){ .cols.even{grid-template-columns:1fr 1fr} }
+  .panel{padding:18px 20px 20px}
+  .panel h3{margin:0 0 2px; font-size:14px; font-weight:700}
+  .panel .cap{margin:0 0 16px}
+  .seg{display:flex; flex-direction:column; gap:11px; margin-top:4px}
+  .srow{display:grid; grid-template-columns:150px 1fr 84px; align-items:center; gap:10px}
+  .srow .sname{font-size:12.5px; color:var(--muted)}
+  .srow .strack{height:18px; background:var(--track); overflow:hidden}
+  .sfill{display:block; height:100%; width:var(--w); background:var(--bar); animation:grow .8s cubic-bezier(.2,.7,.2,1) both}
+  .srow.best .sfill{background:var(--accent)}
+  .srow.best .sname{color:var(--ink); font-weight:600}
+  .srow.won .sfill{background:#008000}
+  .srow.won .sname{color:var(--ink); font-weight:600}
+  .srow .sval{font-size:12.5px; font-weight:700; text-align:right}
+  .srow .sval small{color:var(--muted); font-weight:500}
+  @keyframes grow{from{width:0}to{width:var(--w)}}
+  .insight{margin:14px 0 0; font-size:12.5px; color:var(--muted); border-left:2px solid var(--accent); padding-left:12px}
+  .insight b{color:var(--ink); font-weight:600}
+
+  .drops{display:flex; flex-direction:column; gap:12px}
+  .drop{display:flex; align-items:flex-start; gap:12px}
+  .drop .big{font-size:26px; font-weight:750; letter-spacing:-.02em; line-height:1; min-width:34px}
+  .drop.a .big{color:var(--warn)} .drop.b .big{color:var(--muted)}
+  .drop .txt{font-size:12.5px; color:var(--muted)}
+  .drop .txt b{color:var(--ink); font-weight:600}
+
+  .clist{display:flex; flex-direction:column}
+  .crow{display:grid; grid-template-columns:1fr auto; align-items:center; gap:2px 12px; padding:9px 0; border-bottom:1px solid var(--border)}
+  .crow:last-child{border-bottom:0}
+  /* Explizite Platzierung: ohne sie zieht das zeilenuebergreifende Element
+     (grid-row) die erste Spalte an sich und der Name rutscht nach rechts. */
+  .crow .cn{grid-column:1; grid-row:1; font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .crow .cst{grid-column:1; grid-row:2; font-size:11.5px; color:var(--muted)}
+  .crow .cx{grid-column:2; grid-row:1 / span 2; justify-self:end; font-size:15px; font-weight:750; text-align:right; letter-spacing:-.02em}
+  .crow.flag .cx{color:var(--warn)}
+
+  /* Liste der Zusagen: welche Person aus welcher Abteilung hat zugesagt? */
+  .tlist{display:flex; flex-direction:column; margin-top:4px}
+  .tlist .trow{display:grid; grid-template-columns:1fr auto; align-items:center; gap:2px 12px;
+    padding:9px 0; border-bottom:1px solid var(--border)}
+  .tlist .trow:last-child{border-bottom:0}
+  .tlist .tn{grid-column:1; grid-row:1; font-size:13px; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .tlist .tp{grid-column:1; grid-row:2; font-size:11.5px; color:var(--muted)}
+  .tlist .ta{grid-column:2; grid-row:1 / span 2; justify-self:end; align-self:center; font-size:10.5px; font-weight:700; letter-spacing:.02em;
+    padding:3px 9px; white-space:nowrap; color:var(--good); background:var(--good-soft);
+    border:1px solid color-mix(in srgb,var(--good) 25%,transparent)}
+  .tlist .ta.none{color:var(--muted); background:var(--track); border-color:var(--border)}
+
+  .ai{padding:20px}
+  .ai .aihead{display:flex; align-items:center; gap:10px; margin-bottom:4px}
+  .ai .badge{font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent);
+    background:var(--accent-soft); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent); padding:3px 8px}
+  .ai h3{margin:0; font-size:14px; font-weight:700}
+  .ai .disc{font-size:11.5px; color:var(--muted); margin:2px 0 0}
+
+  footer{background:var(--navy); color:var(--on-navy-dim); margin-top:30px}
+  footer .wrap{display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 22px; font-size:11.5px; flex-wrap:wrap}
+  footer .l{display:flex; align-items:center; gap:8px}
+  footer .l .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+  /* KI-Analyse */
+  .kisec{margin-top:8px}
+  .ki{padding:20px 22px 22px}
+  .ki-controls{display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap}
+  .ki-field{display:flex; flex-direction:column; gap:5px}
+  .ki-lab{font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:700}
+  .ki-btn{font:inherit; font-size:13px; font-weight:700; color:#fff; background:var(--accent);
+    border:1px solid transparent; padding:9px 16px; cursor:pointer}
+  .ki-btn:hover{filter:brightness(1.05)}
+  .ki-btn:disabled{opacity:.5; cursor:default; filter:none}
+  .ki-btn.ghost{color:var(--accent); background:transparent; border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .ki-steck-wrap{margin-top:14px; border-top:1px solid var(--border); padding-top:12px}
+  .ki-steck-wrap summary{font-size:12.5px; color:var(--muted); cursor:pointer; font-weight:600; list-style:none}
+  .ki-steck-wrap summary::-webkit-details-marker{display:none}
+  .ki-steck-wrap summary::before{content:"▸ "; color:var(--accent)}
+  .ki-steck-wrap[open] summary::before{content:"▾ "}
+  .ki-ta{width:100%; margin-top:10px; min-height:96px; resize:vertical; font:inherit; font-size:13px;
+    color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:10px 12px; line-height:1.5}
+  .ki-out{margin-top:16px}
+  .ki-out .ki-hint{color:var(--muted); font-size:13px; margin:0; max-width:64ch}
+  .ki-out h4{margin:16px 0 6px; font-size:13.5px; font-weight:700; color:var(--ink)}
+  .ki-out h4:first-child{margin-top:0}
+  .ki-out p{margin:0 0 8px; font-size:13.5px}
+  .ki-out ul{margin:4px 0 10px; padding-left:20px}
+  .ki-out li{font-size:13.5px; margin:3px 0}
+  .ki-loading{color:var(--muted); font-size:13px}
+  .ki-loading::after{content:"▍"; animation:blink 1s steps(1) infinite; margin-left:1px}
+  @keyframes blink{50%{opacity:0}}
+  .ki-chat{margin-top:18px; border-top:1px solid var(--border); padding-top:14px}
+  .ki-log{display:flex; flex-direction:column; gap:8px; max-height:360px; overflow-y:auto}
+  .ki-log:empty{display:none}
+  .ki-q{align-self:flex-end; max-width:82%; background:var(--navy); color:var(--on-navy); padding:8px 12px; font-size:13px}
+  .ki-a{align-self:flex-start; max-width:92%; background:var(--bg); border:1px solid var(--border); padding:2px 14px; font-size:13.5px}
+  .ki-a p{margin:8px 0} .ki-a h4{margin:10px 0 4px; font-size:13px; font-weight:700} .ki-a ul{margin:4px 0; padding-left:18px} .ki-a li{margin:3px 0}
+  .ki-input{display:flex; gap:8px; margin-top:12px}
+  .ki-qin{flex:1; min-width:0; font:inherit; font-size:13px; color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:9px 12px}
+  .ki-qin:focus{outline:none; border-color:var(--accent)}
+  .ki-docs-row{display:flex; align-items:center; gap:12px; margin-top:14px; flex-wrap:wrap}
+  .ki-filesbtn{display:inline-flex; align-items:center; gap:7px; cursor:pointer; font-size:12.5px; font-weight:700;
+    color:var(--ink); background:var(--bg); border:1px solid var(--border); padding:8px 13px}
+  .ki-filesbtn:hover{border-color:var(--accent)}
+  .ki-docs-hint{font-size:11.5px; color:var(--muted)}
+  .ki-doclist{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+  .ki-doclist:empty{display:none}
+  .ki-doc{display:inline-flex; align-items:center; gap:7px; max-width:100%; font-size:12px; color:var(--ink);
+    background:var(--accent-soft); border:1px solid color-mix(in srgb,var(--accent) 30%,transparent); padding:5px 6px 5px 9px}
+  .ki-doc-ic{flex:none}
+  .ki-doc-n{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:34ch}
+  .ki-doc-x{flex:none; border:none; background:transparent; color:var(--muted); cursor:pointer; font-size:16px; line-height:1; padding:0 3px}
+  .ki-doc-x:hover{color:var(--accent)}
+  .ki-docerr{font-size:12px; color:var(--warn); margin-top:8px}
+  .ki-docerr:empty{display:none}
+
+  /* KI-Handlungs-Checkliste */
+  .ki-checklist:empty{display:none}
+  .ki-checklist{margin-top:18px; border-top:1px solid var(--border); padding-top:14px}
+  .ki-cl-head{font-size:13.5px; font-weight:700; color:var(--ink); margin-bottom:11px}
+  .ki-cl-hint{font-size:11.5px; font-weight:500; color:var(--muted); margin-left:7px}
+  .ki-cl-item{display:flex; align-items:flex-start; gap:11px; padding:10px 12px; border:1px solid var(--border);
+    background:var(--bg); margin-bottom:8px; cursor:pointer}
+  .ki-cl-item:hover{border-color:var(--accent)}
+  .ki-cl-item > input{margin:2px 0 0; width:17px; height:17px; accent-color:var(--accent); flex:none; cursor:pointer}
+  .ki-cl-body{display:flex; flex-direction:column; gap:2px; flex:1; min-width:0}
+  .ki-cl-title{font-size:13px; color:var(--ink); font-weight:600}
+  .ki-cl-detail{font-size:12px; color:var(--muted)}
+  .ki-cl-item.done .ki-cl-title{text-decoration:line-through; color:var(--muted); font-weight:500}
+  .ki-cl-item.done .ki-cl-detail{text-decoration:line-through}
+  .ki-cl-prio{flex:none; align-self:flex-start; font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    padding:3px 8px; border:1px solid transparent}
+  .ki-cl-prio.p-hoch{color:var(--accent); background:var(--accent-soft); border-color:color-mix(in srgb,var(--accent) 30%,transparent)}
+  .ki-cl-prio.p-mittel{color:var(--warn); background:var(--warn-soft); border-color:color-mix(in srgb,var(--warn) 25%,transparent)}
+  .ki-cl-prio.p-niedrig{color:var(--muted); background:var(--track); border-color:var(--border)}
+
+  @media (max-width:720px){ .cols{grid-template-columns:1fr} .srow{grid-template-columns:120px 1fr 76px}
+    .ki-controls{align-items:stretch} .ki-field{width:100%} .ki-btn{width:100%} }
+  @media (prefers-reduced-motion: reduce){ .sfill{animation:none} .tile{transition:none} .ki-loading::after{animation:none} }
+
+  /* ---- Druck / PDF: die aktuelle (gefilterte) Ansicht als sauberes A4-Blatt ---- */
+  .printhead{display:none}
+  @media print{
+    /* Immer hell drucken — auch wenn der Bildschirm im Dunkelmodus läuft */
+    :root,
+    :root[data-theme="dark"],
+    :root:not([data-theme="light"]){
+      --bg:#FFFFFF; --card:#FFFFFF; --ink:#0E2038; --muted:#5C6B7E;
+      --border:#E4E8EE; --track:#EDF1F6; --bar:#2E4A6B;
+      --accent:#FF6F61; --accent-soft:#FFEDEA;
+      --navy:#0E2038; --on-navy:#EAF0F7; --on-navy-dim:#93A6BD;
+      --good:#1B9E6E; --good-soft:#E4F4EE; --warn:#C97E00; --warn-soft:#FBF0DC;
+      --shadow:none;
+    }
+    /* Farbflächen (Kacheln, Balken, Badges) im Druck erhalten */
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important }
+    @page{ size:A4; margin:12mm 11mm 14mm }
+    body{ background:#fff }
+    .wrap{ max-width:none; padding:0 }
+    /* Bedien-Elemente ausblenden — es soll ein Report werden, keine App */
+    .topbar .filesel, .filterbar, #f-print,
+    .ki-controls, .ki-docs-row, #ki-doclist, #ki-docerr, .ki-steck-wrap, .ki-chat,
+    .ki-cl-hint, .cmp-clear, .goalin, .goalhint, .empty .filesel, #kisec .sec-head .m{ display:none !important }
+    .goalprint{ display:inline !important }
+    /* Ohne gelaufene Analyse: KI-Abschnitt ganz weglassen */
+    body.print-no-ki #kisec{ display:none !important }
+    /* Topbar als schlanker Marken-Kopf */
+    .topbar .wrap{ padding:10px 0 }
+    .meta{ white-space:normal }
+    main{ padding:10px 0 0 }
+    /* Selbstbeschreibender Kopf des Blattes (Kampagne · Filter · Zeitraum · Datum) */
+    .printhead{ display:block; margin:12px 0 2px; padding-bottom:10px; border-bottom:2px solid var(--accent) }
+    .printhead h1{ margin:0; font-size:17px; letter-spacing:-.01em }
+    .printhead .ph-sub{ margin:5px 0 0; font-size:11.5px; color:var(--muted) }
+    /* Panels volle Breite → auf A4 besser lesbar */
+    .cols{ grid-template-columns:1fr }
+    /* Nichts über Seitenränder zerschneiden */
+    .card, .sec-head, .kpis, .drop, .crow, .srow, .ki-out h4, .ki-cl-item, .tlist .trow{
+      page-break-inside:avoid; break-inside:avoid }
+    .sec-head{ page-break-after:avoid; break-after:avoid }
+    /* Ruhige Flächen: keine Schatten/Animationen/Hover */
+    .card{ box-shadow:none !important; border-color:#DCE2EA !important }
+    .tile:hover{ transform:none }
+    .sfill{ animation:none !important }
+    a[href]:after{ content:"" }
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="wrap">
+      <div class="brand">
+        <img class="logo" src="data:image/png;base64,__LOGO_B64__" alt="INTRO Business Contact" />
+        <div class="divider"></div>
+        <div class="app"><b>PULSE</b><span>Akquise‑Analyse</span></div>
+      </div>
+      <div class="spacer"></div>
+      <span id="meta" class="meta"></span>
+      <label class="filesel"><input type="file" id="file" accept=".xlsx,.xls,.csv,.tsv" hidden />📂 Datei wählen</label>
+    </div>
+  </div>
+
+  <div id="filterbar" class="filterbar" style="display:none">
+    <div class="wrap">
+      <span class="flabel">Filter</span>
+      <select id="f-akq" class="fsel"></select>
+      <select id="f-erg" class="fsel"></select>
+      <a id="f-reset" class="reset">zurücksetzen</a>
+      <label class="cmpbtn" title="Diesen Report mit einem früheren vergleichen"><input type="file" id="f-cmp" accept=".xlsx,.xls,.csv,.tsv" hidden />⇄ Vergleichen</label>
+      <button id="f-print" class="printbtn" type="button" title="Aktuelle Ansicht als PDF speichern oder drucken">📄 Als PDF speichern</button>
+    </div>
+  </div>
+
+  <main class="wrap">
+    <div id="printhead" class="printhead"></div>
+    <div id="app">
+      <div class="empty">
+        <div class="big">📈</div>
+        <h2>INTRO Pulse</h2>
+        <p>Lade eine Aktivitätsliste (XLSX oder CSV) hoch — du bekommst sofort ein Live‑Dashboard deiner Kaltakquise. Die Datei selbst wird nur im Browser ausgewertet; erst wenn du die KI‑Analyse startest, gehen Kennzahlen und Gesprächsnotizen an den Analyse‑Server.</p>
+        <label class="filesel"><input type="file" id="file2" accept=".xlsx,.xls,.csv,.tsv" hidden />📂 Datei wählen</label>
+        <small>z. B. „Aktivitäten Kamp Viergrad …xlsx"</small>
+        <div id="err"></div>
+      </div>
+    </div>
+
+    <section id="kisec" class="kisec" style="display:none">
+      <div class="sec-head">
+        <div><div class="eyebrow">KI‑Analyse</div><h2>Was sagt Claude zu dieser Kampagne?</h2></div>
+        <div class="m">Kennzahlen, Notizen &amp; Anhänge gehen dafür an den Server · der API‑Key bleibt dort</div>
+      </div>
+      <div class="card ki">
+        <div class="ki-controls">
+          <label class="ki-field">
+            <span class="ki-lab">Modell</span>
+            <select id="ki-model" class="fsel">
+              <option value="claude-sonnet-5">Claude Sonnet 5 — ausgewogen (Standard)</option>
+              <option value="claude-haiku-4-5">Claude Haiku 4.5 — schnell &amp; günstig</option>
+              <option value="claude-opus-5">Claude Opus 5 — tiefste Analyse</option>
+            </select>
+          </label>
+          <button id="ki-run" class="ki-btn">✨ Analyse starten</button>
+        </div>
+        <div class="ki-docs-row">
+          <label class="ki-filesbtn"><input type="file" id="ki-docs" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.tsv,.txt,.md,.png,.jpg,.jpeg,.gif,.webp" hidden />📎 Kontext‑Dateien anhängen</label>
+          <span class="ki-docs-hint">PDF · Word · Excel · Bilder (JPG/PNG) — Claude nutzt sie als Zusatzkontext</span>
+        </div>
+        <div id="ki-doclist" class="ki-doclist"></div>
+        <div id="ki-docerr" class="ki-docerr"></div>
+        <details class="ki-steck-wrap">
+          <summary>Projekt‑Steckbrief als Kontext für Claude — optional, wird nur lokal gespeichert</summary>
+          <textarea id="ki-steck" class="ki-ta" placeholder="Wer ist der Kunde? Zielgruppe/ICP, Angebot, typische Einwände, Kampagnenziel … Je mehr Kontext, desto treffsicherer die Analyse."></textarea>
+        </details>
+        <div id="ki-out" class="ki-out"><p class="ki-hint">Klick auf „Analyse starten" — Claude bewertet Termin‑Quote, Funnel und Einwände und gibt priorisierte Empfehlungen. Anschließend kannst du unten Rückfragen stellen.</p></div>
+        <div id="ki-checklist" class="ki-checklist"></div>
+        <div class="ki-chat">
+          <div id="ki-log" class="ki-log"></div>
+          <div class="ki-input">
+            <input id="ki-q" class="ki-qin" type="text" placeholder="Rückfrage an Claude — z. B. „Welche 5 Firmen sollte ich zuerst nachfassen?“" />
+            <button id="ki-ask" class="ki-btn ghost">Fragen</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="l"><span class="dot"></span>INTRO Pulse · Phase 1 · Stand <b id="build">__BUILD__</b></div>
+      <div>Kennzahlen lokal im Browser berechnet · KI‑Analyse serverseitig · Design &amp; Logo nach intro‑bc.de</div>
+    </div>
+  </footer>
+
+  <!--BUNDLE-->
+</body>
+</html>
