@@ -48,6 +48,7 @@ function analyzeUser(report: unknown): string {
     abschnittHemmnisse,
     "## Früh-Abriss & schwer zu knackende Firmen",
     "Nutze den Projekt-Steckbrief für die Deutung (Zielsegment/ICP, Einwände, Angebot, Kampagnenziel).",
+    "Enthält das JSON den Block `aircall`, sind das echte Telefoniedaten: nutze sie für Anrufzahlen, Erreichbarkeit und Uhrzeiten statt der CRM-Aktivitäten.",
     "",
     "Gib DANACH – und nur danach, ohne weiteren Text – die konkreten Handlungsempfehlungen",
     "als maschinenlesbaren JSON-Block aus: max. 5 Stück, nach Priorität sortiert (wichtigste zuerst),",

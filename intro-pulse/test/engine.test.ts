@@ -13,6 +13,7 @@ import {
   classifyAbteilung,
   classifySektor,
 } from '../src/engine';
+import { normPhone, phoneKeys, matchKey, buildPhoneIndex, computeAircall, type AircallCall } from '../src/aircall';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = join(here, 'fixture.csv');
@@ -119,6 +120,37 @@ console.log('\nUpload-Pfad (Puffer statt Datei)');
 const kBuf = analyzeBuffer(readFileSync(fixture), 'fixture.csv');
 check('analyzeBuffer == analyzeFile (4 Firmen)', kBuf.totalCompanies === 4);
 check('analyzeBuffer Termin-Quote identisch', approx(kBuf.terminQuote, k.terminQuote));
+
+console.log('\nAircall-Abgleich (Telefonnummer → Firma)');
+check('"089 123456-0" → 49891234560', normPhone('089 123456-0') === '49891234560', normPhone('089 123456-0'));
+check('"+49 (0) 89 123456" → 4989123456', normPhone('+49 (0) 89 123456') === '4989123456', normPhone('+49 (0) 89 123456'));
+check('"0049 30 1234567" → 49301234567', normPhone('0049 30 1234567') === '49301234567');
+check('Stammnummer aus "089 123456-0" = 4989123456', phoneKeys('089 123456-0').prefix === '4989123456', JSON.stringify(phoneKeys('089 123456-0')));
+check('ohne Durchwahl kein Präfix', phoneKeys('+49 89 1234560').prefix === null);
+const ex = new Set(['49891234560']), px = new Set(['4989123456']);
+check('exakter Treffer', matchKey('49891234560', ex, px) === '49891234560');
+check('andere Durchwahl → Stammnummer', matchKey('4989123456789', ex, px) === 'p:4989123456');
+check('fremde Nummer → kein Treffer', matchKey('4940999999', ex, px) === null);
+const idx = buildPhoneIndex([{ ...acts[0], telefon: '089 123456-0' }]);
+check('Index: Nummer + Stammnummer → Alpha', idx.firmaByKey.get('49891234560') === 'Alpha GmbH' && idx.firmaByKey.get('p:4989123456') === 'Alpha GmbH', JSON.stringify([...idx.firmaByKey]));
+check('Index: zu kurze Nummern ignoriert (+49 30 1)', !buildPhoneIndex(acts).exact.includes('49301'));
+const keyMap = new Map([['49301', 'Alpha GmbH'], ['49402', 'Beta AG']]);
+const t0 = new Date(2026, 5, 1, 10, 0).getTime() / 1000;
+const acCalls: AircallCall[] = [
+  { k: '49301', u: 'Max', s: t0, a: null, e: t0 + 20 },                       // Alpha, nicht angenommen
+  { k: '49301', u: 'Max', s: t0 + 86400 * 2, a: t0 + 86400 * 2 + 10, e: t0 + 86400 * 2 + 130 }, // Alpha, 2 Min
+  { k: '49301', u: 'Max', s: t0 + 86400 * 4, a: t0 + 86400 * 4 + 5, e: t0 + 86400 * 4 + 25 },   // Alpha, Termintag, 20 s
+  { k: '49301', u: 'Max', s: t0 + 86400 * 9, a: null, e: t0 + 86400 * 9 + 30 },                 // nach dem Termin
+  { k: '49402', u: 'Eva', s: t0, a: null, e: t0 + 25 },                       // Beta
+  { k: '49999', u: 'Eva', s: t0, a: null, e: t0 + 25 },                       // unbekannt → ignoriert
+];
+const ac = computeAircall(acts, acCalls, keyMap);
+check('5 zugeordnete Wählversuche', ac.calls === 5, String(ac.calls));
+check('2 angenommen, 1 Gespräch ≥ 60 s', ac.answered === 2 && ac.gespraeche === 1, JSON.stringify(ac));
+check('Gesprächszeit = 140 s', ac.talkSec === 140, String(ac.talkSec));
+check('Wählversuche bis Termin (Alpha) = 3', approx(ac.avgCallsToTermin, 3), String(ac.avgCallsToTermin));
+check('je Akquisiteur: Max 4, Eva 1', ac.byUser[0]?.name === 'Max' && ac.byUser[0]?.calls === 4 && ac.byUser[1]?.calls === 1);
+check('2 von 4 Firmen angewählt', ac.firmenAngewaehlt === 2 && ac.firmen === 4);
 
 console.log('');
 if (failures) {

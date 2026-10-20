@@ -11,6 +11,14 @@ import {
 import type { Activity, CallerKpi, Kpis } from '../src/types';
 import { diffKpis, type KpiDelta } from '../src/compare';
 import { readAttachment, type DocAttachment } from './src/attachments';
+import {
+  buildPhoneIndex,
+  computeAircall,
+  GESPRAECH_MIN_SEK,
+  type AircallCall,
+  type AircallKpis,
+  type PhoneIndex,
+} from '../src/aircall';
 
 interface Empfehlung { titel: string; detail?: string; prio?: 'hoch' | 'mittel' | 'niedrig' }
 interface KiResult { text: string; empfehlungen?: Empfehlung[]; model?: string }
@@ -42,6 +50,13 @@ const de = (n: number) => n.toLocaleString('de-DE');
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const fmtDate = (d: Date | null) => (d ? d.toLocaleDateString('de-DE') : '—');
+/** Sekunden → „3 h 12 min" bzw. „2:05 min". */
+const fmtDur = (sec: number | null) => {
+  if (sec == null) return '—';
+  const s = Math.round(sec);
+  if (s >= 3600) return `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} min`;
+};
 
 // ---- Bausteine --------------------------------------------------------------
 const tile = (cls: string, lab: string, num: string, sub: string, pill: string) =>
@@ -198,6 +213,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
       ${tile('', 'Früh‑Abriss', pct(k.fruehAbrissRate), `${k.fruehAbrissCompanies} nie beim Entscheider${deltaBadge('fruehAbrissRate')}`, pill('warn', 'beobachten'))}
     </div>
 
+    ${aircallSection()}
     ${secHead('Verlauf', 'Aktivitäten im Zeitverlauf', `Ziel ${k.goal.perMonth} Termine/Monat`)}
     <div class="card chart-wrap">
       <div class="chart"><svg id="tl" viewBox="0 0 960 160" role="img" aria-label="Aktivitäten je Tag"></svg></div>
@@ -238,6 +254,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
 
   drawTimeline(k.timeline);
   document.getElementById('cmp-clear')?.addEventListener('click', (e) => { e.preventDefault(); clearCompare(); });
+  document.getElementById('ac-retry')?.addEventListener('click', (e) => { e.preventDefault(); loadAircall(); });
   const goalIn = document.getElementById('goal-in') as HTMLInputElement | null;
   goalIn?.addEventListener('change', () => {
     const n = Math.round(Number(goalIn.value));
@@ -298,6 +315,192 @@ function apply() {
   currentKpis = computeKpis(acts, { goalPerMonth });
   renderDashboard(currentKpis, acts.length);
   showKI();
+}
+
+// ---- Aircall: echte Wählversuche aus der Telefonanlage ---------------------
+// Das CRM kennt nur, was protokolliert wurde. Aircall zählt jeden Wählversuch,
+// ob angenommen wurde und wie lange gesprochen wurde. Zuordnung über die
+// Telefonnummer im Export; der Aircall-Schlüssel bleibt auf dem Server.
+const KI_EP = (globalThis as { __PULSE_KI_ENDPOINT__?: string }).__PULSE_KI_ENDPOINT__ || '';
+const AIRCALL_ENDPOINT =
+  (globalThis as { __PULSE_AIRCALL_ENDPOINT__?: string }).__PULSE_AIRCALL_ENDPOINT__ ||
+  (KI_EP.includes('pulse-analyze') ? KI_EP.replace('pulse-analyze', 'pulse-aircall') : '');
+type AircallState = 'off' | 'loading' | 'ready' | 'error' | 'not_configured' | 'nophones';
+const aircall = {
+  state: 'off' as AircallState,
+  calls: [] as AircallCall[],
+  unmatched: 0,
+  msg: '',
+  index: null as PhoneIndex | null,
+};
+let aircallSeq = 0;
+const DAY = 86400;
+
+interface AircallResponse { calls?: AircallCall[]; unmatched?: number; nextPage?: number | null; split?: boolean; code?: string; error?: string }
+async function postAircall(body: Record<string, unknown>): Promise<AircallResponse> {
+  const res = await fetch(AIRCALL_ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const data: AircallResponse = await res.json().catch(() => ({ error: `Server-Fehler ${res.status}` }));
+  if (!res.ok || data.error) {
+    const err = new Error(data.error || `Server-Fehler ${res.status}`) as Error & { code?: string };
+    err.code = data.code;
+    throw err;
+  }
+  return data;
+}
+
+async function loadAircall() {
+  const seq = ++aircallSeq;
+  Object.assign(aircall, { state: 'off', calls: [], unmatched: 0, msg: '', index: null });
+  if (!AIRCALL_ENDPOINT || !lastFullKpis) return;
+  const idx = buildPhoneIndex(allActivities);
+  aircall.index = idx;
+  if (!idx.exact.length && !idx.prefix.length) { aircall.state = 'nophones'; apply(); return; }
+  const { from, to } = lastFullKpis.dateRange;
+  if (!from || !to) { aircall.state = 'error'; aircall.msg = 'Im Export fehlt ein Datum — ohne Zeitraum kann ich Aircall nicht abfragen.'; apply(); return; }
+  aircall.state = 'loading';
+  apply();
+
+  const start = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime() / 1000;
+  const end = Math.min(Date.now() / 1000, new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1).getTime() / 1000);
+  const queue: [number, number][] = [];
+  for (let w = start; w < end; w += 7 * DAY) queue.push([w, Math.min(w + 7 * DAY, end)]);
+  const total = queue.length;
+  let done = 0, stalls = 0;
+  try {
+    while (queue.length) {
+      const [wf, wt] = queue.shift()!;
+      let page: number | null = 1;
+      while (page) {
+        const r = await postAircall({ from: Math.floor(wf), to: Math.ceil(wt), page, exact: idx.exact, prefix: idx.prefix });
+        if (seq !== aircallSeq) return; // inzwischen anderer Report geladen
+        if (r.split && wt - wf > 3600) {
+          const mid = Math.floor((wf + wt) / 2);
+          queue.unshift([wf, mid], [mid, wt]);
+          break;
+        }
+        aircall.calls.push(...(r.calls || []));
+        aircall.unmatched += r.unmatched || 0;
+        const next: number | null = r.nextPage ?? null;
+        if (next != null && next === page && !(r.calls || []).length) {
+          // Aircall-Rate-Limit: kurz warten und an derselben Stelle weitermachen
+          if (++stalls > 8) throw new Error('Aircall drosselt gerade die Abfragen — bitte in ein paar Minuten erneut laden.');
+          await new Promise((res) => setTimeout(res, 15000));
+        }
+        page = next;
+        const prog = document.getElementById('ac-progress');
+        if (prog) prog.textContent = `${de(aircall.calls.length)} Anrufe gefunden · Woche ${Math.min(done + 1, total)} von ${total}`;
+      }
+      done++;
+    }
+    aircall.state = 'ready';
+  } catch (e) {
+    if (seq !== aircallSeq) return;
+    const code = (e as Error & { code?: string }).code;
+    aircall.state = code === 'not_configured' ? 'not_configured' : 'error';
+    aircall.msg = (e as Error).message;
+  }
+  if (seq === aircallSeq) apply();
+}
+
+function currentAircall(): AircallKpis | null {
+  if (aircall.state !== 'ready' || !aircall.index) return null;
+  return computeAircall(currentActs, aircall.calls, aircall.index.firmaByKey);
+}
+
+function aircallSection(): string {
+  if (aircall.state === 'off') return '';
+  const head = (meta: string) => secHead('Telefonie', 'Was zeigt Aircall wirklich?', meta);
+  if (aircall.state === 'loading') {
+    return `${head('wird geladen …')}<div class="card panel acbox"><p class="cap"><span class="acspin"></span>Lade die echten Anrufe aus Aircall … <span id="ac-progress"></span></p></div>`;
+  }
+  if (aircall.state === 'nophones') {
+    return `${head('nicht möglich')}<div class="card panel acbox"><p class="cap">Im Export fehlt die Spalte „Telefon" — ohne Nummer kann ich die Aircall‑Anrufe keiner Firma zuordnen.</p></div>`;
+  }
+  if (aircall.state === 'not_configured') {
+    return `${head('noch nicht verbunden')}<div class="card panel acbox"><p class="cap">Aircall ist noch nicht verbunden. Einmalig in Aircall einen API‑Schlüssel anlegen und als <b>AIRCALL_API_ID</b> und <b>AIRCALL_API_TOKEN</b> in Supabase (Edge Functions → Secrets) hinterlegen — danach erscheinen hier die echten Anrufzahlen. <a href="#" id="ac-retry">Erneut prüfen</a></p></div>`;
+  }
+  if (aircall.state === 'error') {
+    return `${head('Fehler')}<div class="card panel acbox"><p class="cap">⚠️ ${esc(aircall.msg)} <a href="#" id="ac-retry">Erneut laden</a></p></div>`;
+  }
+  const a = currentAircall();
+  if (!a) return '';
+  if (!a.calls) {
+    return `${head('keine Treffer')}<div class="card panel acbox"><p class="cap">Im Zeitraum gab es in Aircall keine ausgehenden Anrufe auf die Nummern dieses Reports${aircall.unmatched ? ` (${de(aircall.unmatched)} Anrufe gingen an andere Nummern)` : ''}. Stimmen die Telefonnummern im Export? <a href="#" id="ac-retry">Erneut laden</a></p></div>`;
+  }
+
+  const diff = a.calls - a.crmActivities;
+  const crmPill = diff > 0
+    ? pill('warn', `${de(diff)} mehr als im CRM`)
+    : pill('flat', 'deckt sich mit dem CRM');
+  const tiles = `<div class="kpis">
+      ${tile('', 'Wählversuche', de(a.calls), `laut Aircall · im CRM ${de(a.crmActivities)} Aktivitäten`, crmPill)}
+      ${tile('', 'Angenommen', pct(a.reachRate), `${de(a.answered)} von ${de(a.calls)} · ${de(a.gespraeche)} Gespräche ≥ 1 Min`, pill('flat', 'inkl. Mailbox/Zentrale'))}
+      ${tile('', 'Gesprächszeit', fmtDur(a.talkSec), `Ø ${fmtDur(a.avgTalkSec)} je Gespräch`, pill('flat', 'ab Annahme'))}
+      ${tile('', 'Wählversuche je Termin', a.callsPerTermin != null ? dec(a.callsPerTermin) : '—', a.avgCallsToTermin != null ? `Ø ${dec(a.avgCallsToTermin)} Versuche bis zum Termin` : 'noch kein Termin', pill('key', 'echter Aufwand'))}
+    </div>`;
+
+  const uMax = Math.max(1, ...a.byUser.map((u) => u.calls));
+  const userRows = a.byUser
+    .map((u) => bar(u.name, (u.calls / uMax) * 100, `${de(u.calls)} <small>${pct(u.answered / Math.max(1, u.calls))}</small>`, false, 120))
+    .join('');
+  const userBest = a.byUser.length > 1
+    ? [...a.byUser].filter((u) => u.calls >= 10).sort((x, y) => y.gespraeche / y.calls - x.gespraeche / x.calls)[0]
+    : undefined;
+  const userInsight = userBest
+    ? `<p class="insight"><b>${esc(userBest.name)}</b> führt die meisten echten Gespräche: ${pct(userBest.gespraeche / userBest.calls)} der Anrufe dauern ≥ 1 Min · Gesprächszeit ${fmtDur(userBest.talkSec)}.</p>`
+    : '';
+
+  const hours = a.byHour.filter((h) => h.calls > 0);
+  const rate = (h: { calls: number; answered: number }) => h.answered / Math.max(1, h.calls);
+  const rMax = Math.max(0.001, ...hours.map(rate));
+  const minCalls = Math.max(5, Math.round(a.calls * 0.03));
+  const bestHour = hours.filter((h) => h.calls >= minCalls).sort((x, y) => rate(y) - rate(x))[0];
+  const hourRows = hours
+    .map((h) => bar(`${h.hour}–${h.hour + 1} Uhr`, (rate(h) / rMax) * 100, `${pct(rate(h))} <small>${h.calls}</small>`, h === bestHour, 90))
+    .join('');
+  const hourInsight = bestHour
+    ? `<p class="insight">Am besten erreichbar: <b>${bestHour.hour}–${bestHour.hour + 1} Uhr</b> — ${pct(rate(bestHour))} angenommen bei ${bestHour.calls} Anrufen.</p>`
+    : '';
+
+  const firmRows = a.topFirmen
+    .map((f) => `<div class="crow"><span class="cn">${esc(f.name)}</span><span class="cst">${f.answered}× angenommen${f.won ? ' · Termin' : ''}</span><span class="cx">${f.calls}×</span></div>`)
+    .join('');
+  const ohne = a.firmen - a.firmenAngewaehlt;
+  const notes = [
+    ohne > 0 ? `${de(ohne)} von ${de(a.firmen)} Firmen wurden laut Aircall nie angewählt (Nummer im CRM fehlt oder weicht ab, oder anderer Anschluss).` : '',
+    !filtersActive() && aircall.unmatched ? `${de(aircall.unmatched)} weitere ausgehende Anrufe im Zeitraum gingen an Nummern außerhalb dieses Reports (andere Projekte).` : '',
+    `„Angenommen" heißt: jemand oder die Mailbox hat abgehoben. Als Gespräch zählen Anrufe ab ${GESPRAECH_MIN_SEK} Sekunden.`,
+  ].filter(Boolean).map((t) => `<p class="cap" style="margin-top:6px">${t}</p>`).join('');
+
+  return `
+    ${head(`${de(a.firmenAngewaehlt)} Firmen angewählt · Zuordnung über die Telefonnummer`)}
+    ${tiles}
+    <div class="cols even" style="margin-top:14px">
+      <div class="card panel"><h3>Wählversuche je Akquisiteur</h3><p class="cap">Laut Aircall. Rechts: Anteil angenommen.</p><div class="seg">${userRows}</div>${userInsight}</div>
+      <div class="card panel"><h3>Erreichbarkeit nach Uhrzeit</h3><p class="cap">Anteil angenommener Anrufe. Rechts: Anzahl Anrufe.</p><div class="seg">${hourRows}</div>${hourInsight}</div>
+    </div>
+    <div class="card panel" style="margin-top:14px"><h3>Am häufigsten angewählt</h3><p class="cap">Echte Wählversuche je Firma.</p><div class="clist">${firmRows}</div>${notes}</div>
+`;
+}
+
+function aircallReport() {
+  const a = currentAircall();
+  if (!a || !a.calls) return undefined;
+  return {
+    hinweis: 'Echte Telefoniedaten aus Aircall — für Anrufzahlen verlässlicher als die CRM-Aktivitäten.',
+    waehlversuche: a.calls,
+    crmAktivitaeten: a.crmActivities,
+    angenommen: a.answered,
+    angenommenProzent: +(a.reachRate * 100).toFixed(1),
+    gespraecheAb60Sek: a.gespraeche,
+    gespraechszeitMinuten: Math.round(a.talkSec / 60),
+    avgGespraechSekunden: a.avgTalkSec != null ? Math.round(a.avgTalkSec) : null,
+    waehlversucheJeTermin: a.callsPerTermin != null ? +a.callsPerTermin.toFixed(1) : null,
+    avgVersucheBisTermin: a.avgCallsToTermin != null ? +a.avgCallsToTermin.toFixed(1) : null,
+    firmenNieAngewaehlt: a.firmen - a.firmenAngewaehlt,
+    nachAkquisiteur: a.byUser.map((u) => ({ name: u.name, anrufe: u.calls, angenommen: u.answered, gespraeche: u.gespraeche, minuten: Math.round(u.talkSec / 60) })),
+    nachUhrzeit: a.byHour.map((h) => ({ stunde: h.hour, anrufe: h.calls, angenommen: h.answered })),
+  };
 }
 
 // ---- Snapshot-Vergleich ("was hat sich seit dem letzten Report geändert?") --
@@ -495,6 +698,7 @@ async function loadFile(file: File) {
     filterbar().style.display = '';
     apply();
     window.scrollTo({ top: 0 });
+    loadAircall(); // echte Anrufzahlen nachladen (läuft im Hintergrund)
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     const html = importErrorHtml(msg, sniffColumns(buf, file.name));
@@ -617,6 +821,7 @@ function buildReport() {
     erreichtePositionen: positionen, // Rohbezeichnungen aus dem CRM
     meistBearbeitet: k.mostContacted, schwerZuKnacken: k.hardCases,
     gespraechsnotizen: notizen,
+    aircall: aircallReport(),
   };
 }
 // Endpoint der KI-Analyse: gehostete Supabase-Funktion (zur Build-Zeit gesetzt)

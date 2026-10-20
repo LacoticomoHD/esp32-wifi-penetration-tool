@@ -14,6 +14,10 @@ const KI_ENDPOINT =
   process.env.PULSE_KI_ENDPOINT ||
   'https://coydygpnumqxxealikqb.supabase.co/functions/v1/pulse-analyze';
 
+// Aircall-Abgleich: zweite Funktion im selben Supabase-Projekt.
+const AIRCALL_ENDPOINT =
+  process.env.PULSE_AIRCALL_ENDPOINT || KI_ENDPOINT.replace('pulse-analyze', 'pulse-aircall');
+
 const res = await build({
   entryPoints: [join(here, 'main.ts')],
   bundle: true,
@@ -37,7 +41,7 @@ const buildStamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
 html = html.replace('__BUILD__', () => buildStamp);
 html = html.replace(
   '<!--BUNDLE-->',
-  () => `<script>window.__PULSE_KI_ENDPOINT__=${JSON.stringify(KI_ENDPOINT)}</script>\n<script>${js}</script>`,
+  () => `<script>window.__PULSE_KI_ENDPOINT__=${JSON.stringify(KI_ENDPOINT)};window.__PULSE_AIRCALL_ENDPOINT__=${JSON.stringify(AIRCALL_ENDPOINT)}</script>\n<script>${js}</script>`,
 );
 
 mkdirSync(join(here, 'dist'), { recursive: true });
