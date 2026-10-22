@@ -417,7 +417,7 @@ export function aggregateCompanies(activities: Activity[]): Company[] {
   return companies;
 }
 
-function groupCallers(companies: Company[]): CallerKpi[] {
+function groupCallers(companies: Company[], dmBase: Set<Company>): CallerKpi[] {
   const by = new Map<string, Company[]>();
   for (const c of companies) {
     const k = c.zugeordnet || '—';
@@ -427,14 +427,15 @@ function groupCallers(companies: Company[]): CallerKpi[] {
   return [...by.entries()]
     .map(([name, cs]) => {
       const won = cs.filter((c) => c.won).length;
-      const dm = cs.filter((c) => c.reachedDM).length;
+      const base = cs.filter((c) => dmBase.has(c));
+      const dm = base.filter((c) => c.reachedDM).length;
       return {
         name,
         companies: cs.length,
         won,
         terminQuote: cs.length ? won / cs.length : 0,
         reachedDM: dm,
-        entscheiderQuote: cs.length ? dm / cs.length : 0,
+        entscheiderQuote: base.length ? dm / base.length : 0,
         activities: cs.reduce((n, c) => n + c.activities.length, 0),
       };
     })
@@ -507,8 +508,23 @@ export function computeKpis(
   const companies = aggregateCompanies(activities);
   const total = companies.length;
   const won = companies.filter((c) => c.won);
-  const reachedDM = companies.filter((c) => c.reachedDM);
-  const frueh = companies.filter((c) => c.fruehAbriss);
+  // „Entscheidergespräch" wird oft erst ab einem Stichtag gepflegt. Firmen, die
+  // nur davor bearbeitet wurden, hätten sonst fälschlich „nie beim Entscheider".
+  // Basis = Firmen mit mind. einer Aktivität seit dem ersten erfassten Wert.
+  const dmStartTs = Math.min(
+    ...activities
+      .filter((a) => a.entscheidergespraech !== null && a.datum)
+      .map((a) => new Date(a.datum!.getFullYear(), a.datum!.getMonth(), a.datum!.getDate()).getTime()),
+  );
+  const firstTs = Math.min(...activities.filter((a) => a.datum).map((a) => a.datum!.getTime()));
+  const dmLimited = Number.isFinite(dmStartTs) && firstTs < dmStartTs;
+  const dmBaseArr = dmLimited
+    ? companies.filter((c) => c.activities.some((a) => a.datum && a.datum.getTime() >= dmStartTs))
+    : companies;
+  const dmBase = new Set(dmBaseArr);
+  const dmTotal = dmBaseArr.length;
+  const reachedDM = dmBaseArr.filter((c) => c.reachedDM);
+  const frueh = dmBaseArr.filter((c) => c.fruehAbriss);
   const callsArr = won
     .map((c) => c.callsToTermin)
     .filter((n): n is number => n !== null);
@@ -590,9 +606,9 @@ export function computeKpis(
     totalActivities: activities.length,
     terminQuote: total ? won.length / total : 0,
     wonCompanies: won.length,
-    entscheiderQuote: total ? reachedDM.length / total : 0,
+    entscheiderQuote: dmTotal ? reachedDM.length / dmTotal : 0,
     reachedDMCompanies: reachedDM.length,
-    fruehAbrissRate: total ? frueh.length / total : 0,
+    fruehAbrissRate: dmTotal ? frueh.length / dmTotal : 0,
     fruehAbrissCompanies: frueh.length,
     avgCallsToTermin: avgCalls,
     avgAttemptsPerCompany: total ? activities.length / total : 0,
@@ -601,13 +617,14 @@ export function computeKpis(
     mostContacted,
     leastContacted,
     hardCases,
-    byAkquisiteur: groupCallers(companies),
+    byAkquisiteur: groupCallers(companies, dmBase),
     byRevenueBand: segment(companies, revenueBand, REV_ORDER),
     byEmployeeBand: segment(companies, employeeBand, EMP_ORDER),
     bySektor: segment(companies, sektorBand, SEKTOR_ORDER),
     byIcp: segment(companies, icpBand, ICP_ORDER),
     byEinwand,
     byAbteilung: groupAbteilungen(activities, won),
+    entscheiderBasis: { seit: dmLimited ? new Date(dmStartTs) : null, firmen: dmTotal },
     goal,
     timeline,
     dateRange: { from: dates[0] ?? null, to: dates[dates.length - 1] ?? null },

@@ -110,6 +110,9 @@ export interface Kpis {
   byIcp: SegmentKpi[]; // Kern-ICP vs. außerhalb
   byEinwand: { label: string; companies: number }[]; // warum (noch) kein Termin
   byAbteilung: AbteilungKpi[]; // mit welcher Abteilung entstehen Termine?
+  /** Entscheider-Quote/Früh-Abriss beziehen sich nur auf Firmen, die seit Beginn
+   *  der Erfassung von „Entscheidergespräch" bearbeitet wurden (seit=null: ganzer Zeitraum). */
+  entscheiderBasis: { seit: Date | null; firmen: number };
   goal: { perMonth: number; months: number; wonPerMonth: number; attainment: number };
   timeline: { date: string; activities: number }[];
   dateRange: { from: Date | null; to: Date | null };

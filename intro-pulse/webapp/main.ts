@@ -126,7 +126,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
     ${secHead('Team', 'Wer holt wie viele Termine?', `${akq.length} Akquisiteure · Filter oben grenzt auf eine Person ein`)}
     <div class="cols even">
       <div class="card panel"><h3>Termin‑Quote je Akquisiteur</h3><p class="cap">Firmen mit Termin, geteilt durch bearbeitete Firmen.</p><div class="seg">${qRows}</div><p class="insight">${insightTeam}</p></div>
-      <div class="card panel"><h3>Entscheider‑Quote</h3><p class="cap">Wie oft kommt jemand bis zum Entscheider? Rechts: Ø Versuche je Firma.</p><div class="seg">${eRows}</div></div>
+      <div class="card panel"><h3>Entscheider‑Quote</h3><p class="cap">Wie oft kommt jemand bis zum Entscheider?${k.entscheiderBasis.seit ? ` Firmen seit ${fmtDate(k.entscheiderBasis.seit)}.` : ''} Rechts: Ø Versuche je Firma.</p><div class="seg">${eRows}</div></div>
     </div>
 `;
   }
@@ -196,6 +196,8 @@ function renderDashboard(k: Kpis, activityCount: number) {
 `;
   }
 
+  // Wird „Entscheidergespräch" erst seit einem Stichtag gepflegt, gilt die Quote ab dann.
+  const dmSeit = k.entscheiderBasis.seit ? fmtDate(k.entscheiderBasis.seit) : '';
   const compareMeta = filtersActive()
     ? 'gefiltert · Vergleich gilt für die Gesamtkampagne'
     : comparePrevLabel === 'erster Stand'
@@ -209,8 +211,8 @@ function renderDashboard(k: Kpis, activityCount: number) {
     <div class="kpis">
       ${tile('hero', 'Termin‑Quote', pct(k.terminQuote), `${k.wonCompanies} von ${k.totalCompanies} Firmen${deltaBadge('terminQuote')}`, pill('key', 'Kern‑KPI'))}
       ${tile('', 'Ø Anrufe bis Termin', k.avgCallsToTermin != null ? dec(k.avgCallsToTermin) : '—', 'je gewonnener Firma', pill('flat', `Ø ${dec(k.avgAttemptsPerCompany)} Versuche/Firma`))}
-      ${tile('', 'Entscheider‑Quote', pct(k.entscheiderQuote), `${k.reachedDMCompanies} von ${k.totalCompanies} erreicht${deltaBadge('entscheiderQuote')}`, pill('good', 'stark'))}
-      ${tile('', 'Früh‑Abriss', pct(k.fruehAbrissRate), `${k.fruehAbrissCompanies} nie beim Entscheider${deltaBadge('fruehAbrissRate')}`, pill('warn', 'beobachten'))}
+      ${tile('', 'Entscheider‑Quote', pct(k.entscheiderQuote), `${k.reachedDMCompanies} von ${k.entscheiderBasis.firmen} erreicht${deltaBadge('entscheiderQuote')}`, dmSeit ? pill('flat', `erfasst seit ${dmSeit}`) : pill('good', 'stark'))}
+      ${tile('', 'Früh‑Abriss', pct(k.fruehAbrissRate), `${k.fruehAbrissCompanies} nie beim Entscheider${deltaBadge('fruehAbrissRate')}`, dmSeit ? pill('flat', `seit ${dmSeit}`) : pill('warn', 'beobachten'))}
       ${callsTile(k, activityCount)}
     </div>
 
@@ -226,7 +228,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
     <div class="cols">
       <div class="card panel"><h3>Firmen je weitester Stufe</h3><p class="cap">Jede Firma zählt einmal auf ihrer weitesten Stufe.</p><div class="seg">${funnelRows}</div></div>
       <div class="card panel"><h3>Abriss‑Punkte</h3><p class="cap">Wo Firmen hängen bleiben.</p><div class="drops">
-        <div class="drop a"><div class="big">${k.fruehAbrissCompanies}</div><div class="txt"><b>Nie beim Entscheider</b> — gezielte Ansprechpartner‑Recherche vor dem Anruf lohnt sich.</div></div>
+        <div class="drop a"><div class="big">${k.fruehAbrissCompanies}</div><div class="txt"><b>Nie beim Entscheider</b>${k.entscheiderBasis.seit ? ` (seit ${fmtDate(k.entscheiderBasis.seit)})` : ''} — gezielte Ansprechpartner‑Recherche vor dem Anruf lohnt sich.</div></div>
         <div class="drop b"><div class="big">${k.disqualifiziertCompanies}</div><div class="txt"><b>Disqualifiziert</b> — kein Interesse / Kampagnen‑Stopp. Sauber aussortiert.</div></div>
       </div></div>
     </div>
@@ -825,6 +827,8 @@ function buildReport() {
       firmen: k.totalCompanies, aktivitaeten: k.totalActivities,
       terminQuoteProzent: +(k.terminQuote * 100).toFixed(1), termine: k.wonCompanies,
       entscheiderQuoteProzent: +(k.entscheiderQuote * 100).toFixed(1),
+      entscheiderErfasstSeit: k.entscheiderBasis.seit ? fmtDate(k.entscheiderBasis.seit) : 'ganzer Zeitraum',
+      entscheiderBasisFirmen: k.entscheiderBasis.firmen,
       fruehAbrissRateProzent: +(k.fruehAbrissRate * 100).toFixed(1),
       avgAnrufeBisTermin: k.avgCallsToTermin, avgVersucheJeFirma: +k.avgAttemptsPerCompany.toFixed(1),
       zielProMonat: k.goal.perMonth, zielerreichungProzent: +(k.goal.attainment * 100).toFixed(0),

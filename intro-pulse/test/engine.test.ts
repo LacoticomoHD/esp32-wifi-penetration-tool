@@ -12,6 +12,7 @@ import {
   aggregateCompanies,
   classifyAbteilung,
   classifySektor,
+  computeKpis,
 } from '../src/engine';
 import { normPhone, phoneKeys, matchKey, buildPhoneIndex, computeAircall, type AircallCall } from '../src/aircall';
 
@@ -120,6 +121,18 @@ console.log('\nUpload-Pfad (Puffer statt Datei)');
 const kBuf = analyzeBuffer(readFileSync(fixture), 'fixture.csv');
 check('analyzeBuffer == analyzeFile (4 Firmen)', kBuf.totalCompanies === 4);
 check('analyzeBuffer Termin-Quote identisch', approx(kBuf.terminQuote, k.terminQuote));
+
+console.log('\nEntscheider-Quote ab Erfassungsbeginn');
+check('Fixture: Erfassung ab 02.06., alle 4 Firmen in der Basis', k.entscheiderBasis.firmen === 4, JSON.stringify(k.entscheiderBasis));
+const spaet = acts.map((a) => ({ ...a, entscheidergespraech: a.datum && a.datum.getDate() < 5 ? null : a.entscheidergespraech }));
+const kSpaet = computeKpis(spaet);
+check('Erfassung erst ab 05.06. → seit = 05.06.', kSpaet.entscheiderBasis.seit?.getDate() === 5, String(kSpaet.entscheiderBasis.seit));
+check('Basis = nur Alpha (einzige Firma seit 05.06.)', kSpaet.entscheiderBasis.firmen === 1);
+check('Entscheider-Quote = 100 % (1/1)', approx(kSpaet.entscheiderQuote, 1), String(kSpaet.entscheiderQuote));
+check('Früh-Abriss = 0 % in der Basis', approx(kSpaet.fruehAbrissRate, 0));
+check('Termin-Quote bleibt auf allen Firmen (25 %)', approx(kSpaet.terminQuote, 0.25));
+const ohneSpalte = computeKpis(acts.map((a) => ({ ...a, entscheidergespraech: null })));
+check('Spalte leer → ganzer Zeitraum', ohneSpalte.entscheiderBasis.seit === null && ohneSpalte.entscheiderBasis.firmen === 4);
 
 console.log('\nAircall-Abgleich (Telefonnummer → Firma)');
 check('"089 123456-0" → 49891234560', normPhone('089 123456-0') === '49891234560', normPhone('089 123456-0'));
