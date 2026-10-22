@@ -1,0 +1,8 @@
+Firma/Account;Erstelldatum;Ergebnis;Kommentar;Entscheidergespräch;Contact Funktion;Kontakt;E-Mail;Telefon;Stadt (Postanschrift);Zugeordnet;Account Umsatz;Account Mitarbeiter;Kampagne
+Alpha GmbH;01.06.2026;Nicht erreicht;nur Zentrale;;Marketing;Zentrale;;+49 30 1;Berlin;Max Muster;1.000.000,00 €;10;TestKampagne
+Alpha GmbH;03.06.2026;Entscheider erreicht, nochmal anrufen;guter Draht;Ja;Leitung;Anna Beispiel;a@example.de;+49 30 1;Berlin;Max Muster;1.000.000,00 €;10;TestKampagne
+Alpha GmbH;05.06.2026;Entscheider, Ersttermin vereinbart;Termin steht;Ja;Leitung;Anna Beispiel;a@example.de;+49 30 1;Berlin;Max Muster;1.000.000,00 €;10;TestKampagne
+Beta AG;02.06.2026;Nicht erreicht;niemand da;;;Zentrale;;+49 40 2;Hamburg;Max Muster;20.000.000,00 €;300;TestKampagne
+Beta AG;04.06.2026;Dauerhaft nicht erreicht;mehrfach probiert;;;Zentrale;;+49 40 2;Hamburg;Max Muster;20.000.000,00 €;300;TestKampagne
+Gamma GmbH;02.06.2026;Grundsätzlich kein Interesse / Kampagnen-Stopp;klares Nein;Ja;GF;Bob Beispiel;;+49 221 3;Köln;Max Muster;500000;40;TestKampagne
+Delta GmbH;02.06.2026;Aktuell kein Interesse;in 6 Monaten nochmal;Ja;Leitung;Cara Beispiel;;+49 89 4;München;Max Muster;5000000;120;TestKampagne

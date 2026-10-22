@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+
+# Environment / secrets (never commit the Anthropic API key)
+.env
+.env.local
+
+# Real customer uploads — contain personal data, must never be committed
+uploads/
+*.xlsx
+*.xls
+# (synthetic test fixtures in test/ are CSV and safe to commit)
+
+# OS / editor
+.DS_Store
+*.log
