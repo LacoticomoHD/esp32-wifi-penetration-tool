@@ -211,6 +211,7 @@ function renderDashboard(k: Kpis, activityCount: number) {
       ${tile('', 'Ø Anrufe bis Termin', k.avgCallsToTermin != null ? dec(k.avgCallsToTermin) : '—', 'je gewonnener Firma', pill('flat', `Ø ${dec(k.avgAttemptsPerCompany)} Versuche/Firma`))}
       ${tile('', 'Entscheider‑Quote', pct(k.entscheiderQuote), `${k.reachedDMCompanies} von ${k.totalCompanies} erreicht${deltaBadge('entscheiderQuote')}`, pill('good', 'stark'))}
       ${tile('', 'Früh‑Abriss', pct(k.fruehAbrissRate), `${k.fruehAbrissCompanies} nie beim Entscheider${deltaBadge('fruehAbrissRate')}`, pill('warn', 'beobachten'))}
+      ${callsTile(k, activityCount)}
     </div>
 
     ${aircallSection()}
@@ -430,10 +431,10 @@ function aircallSection(): string {
 
   const diff = a.calls - a.crmActivities;
   const crmPill = diff > 0
-    ? pill('warn', `${de(diff)} mehr als im CRM`)
-    : pill('flat', 'deckt sich mit dem CRM');
+    ? pill('warn', `${pct(diff / a.calls)} der Anrufe`)
+    : pill('good', 'alles erfasst');
   const tiles = `<div class="kpis">
-      ${tile('', 'Wählversuche', de(a.calls), `laut Aircall · im CRM ${de(a.crmActivities)} Aktivitäten`, crmPill)}
+      ${tile('', 'Nicht im CRM erfasst', de(Math.max(0, diff)), `${de(a.calls)} Wählversuche · ${de(a.crmActivities)} CRM‑Aktivitäten`, crmPill)}
       ${tile('', 'Angenommen', pct(a.reachRate), `${de(a.answered)} von ${de(a.calls)} · ${de(a.gespraeche)} Gespräche ≥ 1 Min`, pill('flat', 'inkl. Mailbox/Zentrale'))}
       ${tile('', 'Gesprächszeit', fmtDur(a.talkSec), `Ø ${fmtDur(a.avgTalkSec)} je Gespräch`, pill('flat', 'ab Annahme'))}
       ${tile('', 'Wählversuche je Termin', a.callsPerTermin != null ? dec(a.callsPerTermin) : '—', a.avgCallsToTermin != null ? `Ø ${dec(a.avgCallsToTermin)} Versuche bis zum Termin` : 'noch kein Termin', pill('key', 'echter Aufwand'))}
@@ -483,12 +484,26 @@ function aircallSection(): string {
 `;
 }
 
+/** Überblicks-Kachel: Anrufe im Zeitraum — aus Aircall, sonst aus dem CRM. */
+function callsTile(k: Kpis, activityCount: number): string {
+  const a = currentAircall();
+  if (a && a.calls) {
+    return tile('', 'Anrufe im Zeitraum', de(a.calls),
+      `Ø ${dec(a.calls / Math.max(1, a.aktiveTage))} pro Telefontag · ${a.aktiveTage} Tage`, pill('key', 'laut Aircall'));
+  }
+  const tage = Math.max(1, k.timeline.length);
+  const hinweis = aircall.state === 'loading' ? 'Aircall lädt …' : 'laut CRM';
+  return tile('', 'Anrufe im Zeitraum', de(activityCount),
+    `Ø ${dec(activityCount / tage)} pro Tag · ${k.timeline.length} aktive Tage`, pill('flat', hinweis));
+}
+
 function aircallReport() {
   const a = currentAircall();
   if (!a || !a.calls) return undefined;
   return {
     hinweis: 'Echte Telefoniedaten aus Aircall — für Anrufzahlen verlässlicher als die CRM-Aktivitäten.',
     waehlversuche: a.calls,
+    telefontage: a.aktiveTage,
     crmAktivitaeten: a.crmActivities,
     angenommen: a.answered,
     angenommenProzent: +(a.reachRate * 100).toFixed(1),

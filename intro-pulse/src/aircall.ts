@@ -78,6 +78,7 @@ export function matchKey(digits: string, exact: Set<string>, prefix: Set<string>
 
 export interface AircallKpis {
   calls: number; // Wählversuche zu Firmen dieser Ansicht
+  aktiveTage: number; // Tage mit mind. einem Wählversuch
   answered: number; // angenommen (inkl. Mailbox/Zentrale)
   gespraeche: number; // angenommen und ≥ GESPRAECH_MIN_SEK
   reachRate: number; // answered / calls
@@ -108,6 +109,7 @@ export function computeAircall(acts: Activity[], calls: AircallCall[], firmaByKe
   const perFirma = new Map<string, { calls: number; answered: number; bisTermin: number }>();
   const perUser = new Map<string, { calls: number; answered: number; gespraeche: number; talkSec: number }>();
   const hours = new Map<number, { calls: number; answered: number }>();
+  const tage = new Set<string>();
   let n = 0, answered = 0, gespraeche = 0, talkSec = 0, gespraechSec = 0;
 
   for (const c of calls) {
@@ -133,7 +135,9 @@ export function computeAircall(acts: Activity[], calls: AircallCall[], firmaByKe
     if (isGespr) u.gespraeche++;
     perUser.set(name, u);
 
-    const h = new Date(c.s * 1000).getHours();
+    const d = new Date(c.s * 1000);
+    tage.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+    const h = d.getHours();
     const hb = hours.get(h) || { calls: 0, answered: 0 };
     hb.calls++;
     if (isAns) hb.answered++;
@@ -144,6 +148,7 @@ export function computeAircall(acts: Activity[], calls: AircallCall[], firmaByKe
   const wonMitAnruf = won.filter((w) => (perFirma.get(w)?.bisTermin ?? 0) > 0);
   return {
     calls: n,
+    aktiveTage: tage.size,
     answered,
     gespraeche,
     reachRate: n ? answered / n : 0,
